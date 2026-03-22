@@ -1,0 +1,27 @@
+version: "3.9"
+
+services:
+  # ============================================================
+  # AI Fitness Coach — Orchestration API
+  # ============================================================
+  # External services (already running on the network):
+  #   wger:    http://192.168.50.98:3000/
+  #   tandoor: http://192.168.50.226:8002/
+  #   ollama:  http://192.168.50.41:11434/
+  # ============================================================
+  coach-api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: coach-api
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+      - coach-data:/app/data
+    env_file:
+      - .env
+    restart: unless-stopped
+
+volumes:
+  coach-data:

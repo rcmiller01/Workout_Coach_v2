@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="description" content="AI-powered fitness and nutrition coach — personalized workout and meal plans">
+    <meta name="theme-color" content="#0f0f23">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
+    <title>AI Fitness Coach</title>
+
+    <link rel="manifest" href="manifest.json">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+    <div id="app">
+        <!-- Navigation -->
+        <nav id="bottom-nav" class="bottom-nav">
+            <button class="nav-item active" data-route="dashboard" id="nav-dashboard">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9,22 9,12 15,12 15,22"></polyline></svg>
+                <span>Today</span>
+            </button>
+            <button class="nav-item" data-route="workout" id="nav-workout">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6.5 6.5h11M6.5 17.5h11M2 12h4M18 12h4M6 12a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h0a2 2 0 0 1 2 2v2a2 2 0 0 1-2 2zm0 0a2 2 0 0 0-2 2v2a2 2 0 0 0 2 2h0a2 2 0 0 0 2-2v-2a2 2 0 0 0-2-2zm12-6a2 2 0 0 1 2 2v2a2 2 0 0 1-2 2h0a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2zm0 6a2 2 0 0 0-2 2v2a2 2 0 0 0 2 2h0a2 2 0 0 0 2-2v-2a2 2 0 0 0-2-2z"></path></svg>
+                <span>Workout</span>
+            </button>
+            <button class="nav-item" data-route="meals" id="nav-meals">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8h1a4 4 0 0 1 0 8h-1M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"></path><line x1="6" y1="1" x2="6" y2="4"></line><line x1="10" y1="1" x2="10" y2="4"></line><line x1="14" y1="1" x2="14" y2="4"></line></svg>
+                <span>Meals</span>
+            </button>
+            <button class="nav-item" data-route="shopping" id="nav-shopping">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"></path><line x1="3" y1="6" x2="21" y2="6"></line><path d="M16 10a4 4 0 0 1-8 0"></path></svg>
+                <span>Shop</span>
+            </button>
+            <button class="nav-item" data-route="progress" id="nav-progress">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>
+                <span>Progress</span>
+            </button>
+            <button class="nav-item" data-route="trends" id="nav-trends">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path><path d="M10 8v4m0 0v2m0-2h2m-2 0H8"></path></svg>
+                <span>Insights</span>
+            </button>
+        </nav>
+
+        <!-- Main Content Area -->
+        <main id="main-content" class="main-content">
+            <!-- Dashboard View (Default) -->
+            <section id="view-dashboard" class="view active">
+                <header class="view-header">
+                    <div class="header-top">
+                        <h1 class="greeting" id="greeting-text">Good morning 💪</h1>
+                        <button class="btn-icon" id="btn-settings" aria-label="Settings">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+                        </button>
+                    </div>
+                    <p class="coaching-message" id="coaching-message"></p>
+                </header>
+
+                <div class="dashboard-grid">
+                    <!-- Plan Adjustments Banner -->
+                    <div id="replanning-banner" class="replanning-banner" style="display: none;">
+                        <!-- Dynamic content via JS -->
+                    </div>
+
+                    <!-- Today's Workout Card -->
+
+                    <div class="card card-workout" id="card-workout">
+                        <div class="card-header">
+                            <span class="card-label">Today's Workout</span>
+                            <span class="card-badge" id="workout-status">Pending</span>
+                        </div>
+                        <h2 class="card-title" id="workout-focus">Loading...</h2>
+                        <div class="card-meta" id="workout-meta">
+                            <span class="meta-item">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><circle cx="12" cy="12" r="10"></circle><polyline points="12,6 12,12 16,14"></polyline></svg>
+                                <span id="workout-duration">--</span> min
+                            </span>
+                            <span class="meta-item">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22,4 12,14.01 9,11.01"></polyline></svg>
+                                <span id="workout-exercises">--</span> exercises
+                            </span>
+                        </div>
+                        <button class="btn-primary" id="btn-start-workout">Start Workout →</button>
+                    </div>
+
+                    <!-- Macros Card -->
+                    <div class="card card-macros" id="card-macros">
+                        <div class="card-header">
+                            <span class="card-label">Today's Nutrition</span>
+                        </div>
+                        <div class="macro-rings" id="macro-rings">
+                            <div class="macro-ring" id="ring-calories">
+                                <svg viewBox="0 0 80 80" class="ring-svg">
+                                    <circle cx="40" cy="40" r="35" class="ring-bg"/>
+                                    <circle cx="40" cy="40" r="35" class="ring-fill" id="ring-calories-fill" style="--progress: 0"/>
+                                </svg>
+                                <div class="ring-label">
+                                    <span class="ring-value" id="val-calories">--</span>
+                                    <span class="ring-unit">kcal</span>
+                                </div>
+                            </div>
+                            <div class="macro-ring" id="ring-protein">
+                                <svg viewBox="0 0 80 80" class="ring-svg">
+                                    <circle cx="40" cy="40" r="35" class="ring-bg"/>
+                                    <circle cx="40" cy="40" r="35" class="ring-fill ring-protein" id="ring-protein-fill" style="--progress: 0"/>
+                                </svg>
+                                <div class="ring-label">
+                                    <span class="ring-value" id="val-protein">--</span>
+                                    <span class="ring-unit">g protein</span>
+                                </div>
+                            </div>
+                            <div class="macro-ring" id="ring-carbs">
+                                <svg viewBox="0 0 80 80" class="ring-svg">
+                                    <circle cx="40" cy="40" r="35" class="ring-bg"/>
+                                    <circle cx="40" cy="40" r="35" class="ring-fill ring-carbs" id="ring-carbs-fill" style="--progress: 0"/>
+                                </svg>
+                                <div class="ring-label">
+                                    <span class="ring-value" id="val-carbs">--</span>
+                                    <span class="ring-unit">g carbs</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Quick Stats -->
+                    <div class="card card-stats">
+                        <div class="stat-row">
+                            <div class="stat-item clickable" onclick="document.getElementById('weight-modal').style.display='block'">
+                                <span class="stat-value" id="stat-weight">--</span>
+                                <span class="stat-label">Weight (lbs) +</span>
+                            </div>
+
+                            <div class="stat-item">
+                                <span class="stat-value" id="stat-adherence">--</span>
+                                <span class="stat-label">Adherence</span>
+                            </div>
+                            <div class="stat-item">
+                                <span class="stat-value" id="stat-streak">--</span>
+                                <span class="stat-label">Streak</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Upcoming -->
+                    <div class="card card-upcoming">
+                        <div class="card-header">
+                            <span class="card-label">Coming Up</span>
+                        </div>
+                        <div class="upcoming-item" id="next-workout-preview">
+                            <span class="upcoming-day" id="next-workout-day">--</span>
+                            <span class="upcoming-focus" id="next-workout-focus">--</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Workout View -->
+            <section id="view-workout" class="view">
+                <header class="view-header">
+                    <h1>Today's Workout</h1>
+                </header>
+                <div id="workout-content" class="workout-content">
+                    <div class="empty-state">
+                        <p>No workout planned for today.</p>
+                        <button class="btn-secondary" id="btn-generate-plan">Generate Plan</button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Meals View -->
+            <section id="view-meals" class="view">
+                <header class="view-header">
+                    <h1>Today's Meals</h1>
+                </header>
+                <div id="meals-content" class="meals-content">
+                    <div class="empty-state">
+                        <p>No meal plan for today.</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Shopping View -->
+            <section id="view-shopping" class="view">
+                <header class="view-header">
+                    <h1>Shopping List</h1>
+                </header>
+                <div id="shopping-content" class="shopping-content">
+                    <div class="empty-state">
+                        <p>No shopping list generated yet.</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Progress View -->
+            <section id="view-progress" class="view">
+                <header class="view-header">
+                    <h1>Progress</h1>
+                </header>
+                <div id="progress-content" class="progress-content">
+                    <div class="empty-state">
+                        <p>Log your weight to see your progress over time.</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Trends / Insights View -->
+            <section id="view-trends" class="view">
+                <header class="view-header">
+                    <h1>Coach Insights</h1>
+                    <p class="view-subtitle">4-week trends and analytics</p>
+                </header>
+                <div id="trends-content" class="trends-content">
+                    <div class="empty-state">
+                        <p>Loading insights...</p>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Revision History Modal -->
+    <div id="revision-modal" class="modal" style="display:none">
+        <div class="modal-overlay" onclick="document.getElementById('revision-modal').style.display='none'"></div>
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 style="margin:0">Plan History</h2>
+                <button class="btn-close" onclick="document.getElementById('revision-modal').style.display='none'">&times;</button>
+            </div>
+            <p style="color:var(--text-secondary); font-size:13px; margin:0 0 8px;">Every adjustment the coach makes is logged here with a full audit trail.</p>
+            <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px; font-size:11px;">
+                <span style="background:rgba(59,130,246,0.15); color:#3b82f6; padding:2px 6px; border-radius:6px;">⚡ Auto-Applied</span>
+                <span style="background:rgba(139,92,246,0.15); color:#8b5cf6; padding:2px 6px; border-radius:6px;">⏳ Pending</span>
+                <span style="background:rgba(34,197,94,0.15); color:#22c55e; padding:2px 6px; border-radius:6px;">✅ Approved</span>
+                <span style="background:rgba(107,114,128,0.1); color:#6b7280; padding:2px 6px; border-radius:6px;">↩️ Reverted</span>
+                <span style="background:rgba(245,158,11,0.1); color:#f59e0b; padding:2px 6px; border-radius:6px;">⏭️ Superseded</span>
+                <span style="background:rgba(239,68,68,0.1); color:#ef4444; padding:2px 6px; border-radius:6px;">🚫 Blocked</span>
+            </div>
+            <div id="revision-list" class="revision-history-list" style="max-height:400px; overflow-y:auto;">
+                <!-- Dynamic Content -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Log Weight Modal -->
+
+    <div id="weight-modal" class="modal" style="display: none;">
+        <div class="modal-overlay" onclick="document.getElementById('weight-modal').style.display='none'"></div>
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Log Body Weight</h2>
+            </div>
+            <form id="weight-form">
+                <div class="form-group">
+                    <label for="weight-input">Current Weight (lbs)</label>
+                    <input type="number" id="weight-input" name="weight-lbs" step="0.1" required>
+                </div>
+                <div class="form-group">
+                    <label for="weight-notes">Notes (optional)</label>
+                    <input type="text" id="weight-notes" name="notes" placeholder="e.g. Woke up dehydrated">
+                </div>
+                <button type="submit" class="btn-primary btn-full">Log Weight ✓</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Log Meal Modal -->
+    <div id="meal-modal" class="modal" style="display: none;">
+        <div class="modal-overlay" onclick="document.getElementById('meal-modal').style.display='none'"></div>
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Log a Meal</h2>
+                <button class="btn-close" onclick="document.getElementById('meal-modal').style.display='none'">&times;</button>
+            </div>
+            <form id="meal-form">
+                <div class="form-group">
+                    <label for="meal-type">Meal Type</label>
+                    <select id="meal-type" name="meal_type" required>
+                        <option value="breakfast">Breakfast</option>
+                        <option value="lunch">Lunch</option>
+                        <option value="dinner">Dinner</option>
+                        <option value="snack">Snack</option>
+                        <option value="other">Other</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="meal-name">What did you eat?</label>
+                    <input type="text" id="meal-name" name="name" placeholder="e.g. Grilled chicken breast with rice and steamed broccoli" required>
+                </div>
+                <div class="form-group">
+                    <label for="meal-notes">Portion/Details (optional)</label>
+                    <input type="text" id="meal-notes" name="notes" placeholder="e.g. Large portion, extra sauce, 2 cups rice">
+                </div>
+                <p style="font-size: 12px; color: var(--text-tertiary); margin: 8px 0 16px;">
+                    AI will estimate calories and macros based on your description
+                </p>
+                <button type="submit" class="btn-primary btn-full">Log Meal ✓</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Setup Modal (first-time use) -->
+    <div id="setup-modal" class="modal" style="display: none;">
+        <div class="modal-overlay"></div>
+        <div class="modal-content">
+            <h2>Welcome to AI Fitness Coach</h2>
+            <p>Let's set up your profile to get started.</p>
+            <form id="setup-form">
+                <div class="form-group">
+                    <label for="setup-goal">Primary Goal</label>
+                    <select id="setup-goal" name="goal">
+                        <option value="fat_loss">Fat Loss</option>
+                        <option value="muscle_gain">Muscle Gain</option>
+                        <option value="maintenance" selected>Maintenance</option>
+                        <option value="general_fitness">General Fitness</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="setup-days">Training Days / Week</label>
+                    <input type="number" id="setup-days" name="days_per_week" value="4" min="1" max="7">
+                </div>
+                <div class="form-group">
+                    <label for="setup-calories">Daily Calorie Target</label>
+                    <input type="number" id="setup-calories" name="target_calories" value="2200" min="1000" max="6000">
+                </div>
+                <div class="form-group">
+                    <label for="setup-protein">Protein Target (g)</label>
+                    <input type="number" id="setup-protein" name="target_protein_g" value="180" min="50" max="400">
+                </div>
+                <button type="submit" class="btn-primary btn-full">Get Started →</button>
+            </form>
+        </div>
+    </div>
+
+    <script src="js/api.js"></script>
+    <script src="js/router.js"></script>
+    <script src="js/components/dashboard.js"></script>
+    <script src="js/components/workout.js"></script>
+    <script src="js/components/meals.js"></script>
+    <script src="js/components/shopping.js"></script>
+    <script src="js/components/progress.js"></script>
+    <script src="js/components/trends.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>

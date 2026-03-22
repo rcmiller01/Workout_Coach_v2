@@ -1,0 +1,147 @@
+{
+  "metadata": {
+    "user_id": "replace-user",
+    "backed_up_at": "2026-03-21T22:08:40.473215",
+    "backup_id": "backup-20260321-220840-replace-user"
+  },
+  "user": {
+    "id": "replace-user",
+    "username": "demo_coach_user",
+    "email": "demo@example.com",
+    "is_active": true,
+    "created_at": "2026-03-21T22:08:40"
+  },
+  "profile": {
+    "user_id": "replace-user",
+    "goal": "fat_loss",
+    "equipment": [
+      "barbell",
+      "dumbbells",
+      "cables",
+      "bench",
+      "rack"
+    ],
+    "days_per_week": 4,
+    "session_length_min": 60,
+    "target_calories": 2200,
+    "target_protein_g": 180,
+    "target_carbs_g": 200,
+    "target_fat_g": 75,
+    "height_cm": 178.0,
+    "weight_kg": 85.0,
+    "age": 32,
+    "sex": "male"
+  },
+  "weight_entries": [
+    {
+      "id": "bbbe7b86-5ffe-43ee-b97a-d881315a6c8e",
+      "weight_kg": 85.0,
+      "date": "2026-03-07T22:08:40.463639",
+      "source": "manual"
+    },
+    {
+      "id": "ee68edb6-2b32-41a5-a878-8c891939627a",
+      "weight_kg": 85.2,
+      "date": "2026-03-08T22:08:40.463639",
+      "source": "manual"
+    },
+    {
+      "id": "bfbe821b-e342-47bf-a426-5151ebdd134c",
+      "weight_kg": 84.8,
+      "date": "2026-03-09T22:08:40.463639",
+      "source": "healthkit"
+    },
+    {
+      "id": "5a907587-ffd9-4c0b-93b5-34a00dfe9c3b",
+      "weight_kg": 84.9,
+      "date": "2026-03-10T22:08:40.463639",
+      "source": "manual"
+    },
+    {
+      "id": "10dfcd49-dd8c-4339-9d0e-0f41179060df",
+      "weight_kg": 84.6,
+      "date": "2026-03-11T22:08:40.463639",
+      "source": "healthkit"
+    },
+    {
+      "id": "eed05d9f-a1a0-4fb6-9978-dccf38300cda",
+      "weight_kg": 84.7,
+      "date": "2026-03-12T22:08:40.463639",
+      "source": "manual"
+    },
+    {
+      "id": "48194e0c-f57f-4f04-b8cb-4679fbe59c52",
+      "weight_kg": 84.4,
+      "date": "2026-03-13T22:08:40.463639",
+      "source": "healthkit"
+    },
+    {
+      "id": "7e94ca22-09dd-47ff-aff2-881df561b148",
+      "weight_kg": 84.5,
+      "date": "2026-03-14T22:08:40.463639",
+      "source": "manual"
+    },
+    {
+      "id": "92b0b49d-a397-4b70-bcd9-d587649ddedb",
+      "weight_kg": 84.3,
+      "date": "2026-03-15T22:08:40.463639",
+      "source": "healthkit"
+    },
+    {
+      "id": "7c792b13-b614-4da5-b7df-abaae012a823",
+      "weight_kg": 84.4,
+      "date": "2026-03-16T22:08:40.463639",
+      "source": "manual"
+    },
+    {
+      "id": "afccf499-f104-4634-8ccb-970637a85dbb",
+      "weight_kg": 84.1,
+      "date": "2026-03-17T22:08:40.463639",
+      "source": "healthkit"
+    },
+    {
+      "id": "48a6ff41-8d70-4397-81ce-aa9f986f200d",
+      "weight_kg": 84.2,
+      "date": "2026-03-18T22:08:40.463639",
+      "source": "manual"
+    },
+    {
+      "id": "61707061-f080-4b20-834d-0f6442e498ff",
+      "weight_kg": 83.9,
+      "date": "2026-03-19T22:08:40.463639",
+      "source": "healthkit"
+    },
+    {
+      "id": "1dea4c4f-3337-4399-bf07-30ebf83b35a0",
+      "weight_kg": 84.0,
+      "date": "2026-03-20T22:08:40.463639",
+      "source": "manual"
+    },
+    {
+      "id": "7f7e74ad-8be2-451c-b66a-373a80f0f712",
+      "weight_kg": 83.8,
+      "date": "2026-03-21T22:08:40.463639",
+      "source": "healthkit"
+    }
+  ],
+  "plans": [
+    {
+      "id": "plan-replace-user-20260321",
+      "status": "active"
+    }
+  ],
+  "revisions": [
+    {
+      "id": "83cc3b9a-db7d-45d9-a104-c4ee6887be6f",
+      "status": "superseded"
+    },
+    {
+      "id": "d6aa4222-0e82-441b-9b92-11174c85116d",
+      "status": "applied"
+    },
+    {
+      "id": "7028dfc6-b44a-4108-b4a0-8af135434389",
+      "status": "reverted"
+    }
+  ]
+}
