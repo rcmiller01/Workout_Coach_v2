@@ -36,6 +36,7 @@ async def init_db():
 
     # Add columns that may be missing from existing tables (safe ALTER TABLE)
     _alter_statements = [
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash VARCHAR(255)",
         "ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS workout_notes TEXT",
         "ALTER TABLE meal_logs ADD COLUMN IF NOT EXISTS synced_to_wger VARCHAR(20) DEFAULT 'pending'",
         "ALTER TABLE weight_entries ADD COLUMN IF NOT EXISTS synced_to_wger VARCHAR(20) DEFAULT 'pending'",

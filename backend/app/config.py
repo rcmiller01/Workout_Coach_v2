@@ -27,6 +27,11 @@ class Settings(BaseSettings):
     debug: bool = True
     secret_key: str = "change-me-to-a-random-secret-key"
 
+    # --- Auth / JWT ---
+    access_token_expire_minutes: int = 30
+    refresh_token_expire_days: int = 7
+    jwt_algorithm: str = "HS256"
+
     # --- Database ---
     database_url: str = "sqlite+aiosqlite:///./data/coach.db"
 

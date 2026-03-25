@@ -9,7 +9,7 @@ Revision state handling:
     - superseded: newer revision targeting the same area replaced this one
     - blocked:    could not be applied due to a newer plan revision
 """
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc, func, update, and_, or_
 from datetime import datetime, timedelta, timezone
@@ -17,7 +17,8 @@ import json
 import logging
 
 from app.database import get_db
-from app.models.user import UserProfile, WeightEntry
+from app.api.deps import get_optional_user
+from app.models.user import User, UserProfile, WeightEntry
 from app.models.plan import WeeklyPlan, PlanRevision
 from app.schemas.plan import WeeklyPlanRequest, WeeklyPlanResponse, PlanRevisionResponse
 from app.providers.wger import WgerProvider
@@ -111,7 +112,10 @@ async def _get_next_revision_number(db: AsyncSession, plan_id: str) -> int:
 
 
 @router.post("/weekly", response_model=WeeklyPlanResponse, status_code=201)
-async def generate_weekly_plan(request: WeeklyPlanRequest, db: AsyncSession = Depends(get_db)):
+async def generate_weekly_plan(request: WeeklyPlanRequest, current_user: User | None = Depends(get_optional_user), db: AsyncSession = Depends(get_db)):
+    request.user_id = current_user.id if current_user else request.user_id
+    if not request.user_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
     result = await db.execute(select(UserProfile).where(UserProfile.user_id == request.user_id))
     profile_model = result.scalar_one_or_none()
     if not profile_model:
@@ -180,7 +184,10 @@ async def generate_weekly_plan(request: WeeklyPlanRequest, db: AsyncSession = De
 
 
 @router.get("/current/{user_id}", response_model=WeeklyPlanResponse)
-async def get_current_plan(user_id: str, db: AsyncSession = Depends(get_db)):
+async def get_current_plan(user_id: str = None, current_user: User | None = Depends(get_optional_user), db: AsyncSession = Depends(get_db)):
+    user_id = current_user.id if current_user else user_id
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
     res = await db.execute(select(WeeklyPlan).where(WeeklyPlan.user_id == user_id, WeeklyPlan.status == "active").order_by(desc(WeeklyPlan.created_at)).limit(1))
     plan = res.scalar_one_or_none()
     if not plan: raise HTTPException(status_code=404, detail="No active plan found")
@@ -188,7 +195,10 @@ async def get_current_plan(user_id: str, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/replan", response_model=PlanRevisionResponse)
-async def adaptive_replan(user_id: str, db: AsyncSession = Depends(get_db)):
+async def adaptive_replan(user_id: str = Query(None), current_user: User | None = Depends(get_optional_user), db: AsyncSession = Depends(get_db)):
+    user_id = current_user.id if current_user else user_id
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
     # 1. Get Active Plan
     res = await db.execute(select(WeeklyPlan).where(WeeklyPlan.user_id == user_id, WeeklyPlan.status == "active").order_by(desc(WeeklyPlan.created_at)))
     plan = res.scalar_one_or_none()
@@ -290,7 +300,7 @@ async def adaptive_replan(user_id: str, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/replan/approve/{revision_id}", response_model=PlanRevisionResponse)
-async def approve_replan(revision_id: str, db: AsyncSession = Depends(get_db)):
+async def approve_replan(revision_id: str, current_user: User | None = Depends(get_optional_user), db: AsyncSession = Depends(get_db)):
     res = await db.execute(select(PlanRevision).where(PlanRevision.id == revision_id))
     revision = res.scalar_one_or_none()
     if not revision: raise HTTPException(status_code=404, detail="Revision not found")
@@ -326,7 +336,7 @@ async def approve_replan(revision_id: str, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/replan/undo/{revision_id}", response_model=PlanRevisionResponse)
-async def revert_replan(revision_id: str, db: AsyncSession = Depends(get_db)):
+async def revert_replan(revision_id: str, current_user: User | None = Depends(get_optional_user), db: AsyncSession = Depends(get_db)):
     """
     Reverse an auto-applied revision by creating a compensating patch.
     Marks the original as 'reverted' (not deleted) to preserve audit trail.
@@ -393,7 +403,7 @@ async def revert_replan(revision_id: str, db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/revisions/{plan_id}", response_model=list[PlanRevisionResponse])
-async def get_plan_revisions(plan_id: str, db: AsyncSession = Depends(get_db)):
+async def get_plan_revisions(plan_id: str, current_user: User | None = Depends(get_optional_user), db: AsyncSession = Depends(get_db)):
     """
     Get all revisions for a plan, ordered newest first.
     Includes status labels for UI display.
@@ -408,7 +418,10 @@ async def get_plan_revisions(plan_id: str, db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/revisions/user/{user_id}", response_model=list[PlanRevisionResponse])
-async def get_user_revisions(user_id: str, limit: int = 20, db: AsyncSession = Depends(get_db)):
+async def get_user_revisions(user_id: str = None, limit: int = 20, current_user: User | None = Depends(get_optional_user), db: AsyncSession = Depends(get_db)):
+    user_id = current_user.id if current_user else user_id
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
     """
     Get all revisions for a user across all plans, ordered newest first.
     """

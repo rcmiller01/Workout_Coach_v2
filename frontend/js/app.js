@@ -70,18 +70,44 @@ const App = {
     },
 
     async init() {
-        // Check for stored user ID
-        this.userId = localStorage.getItem('coach_user_id');
-
-        // Init router
         Router.init();
 
-        if (!this.userId) {
-            this.showSetup();
-        } else {
+        // Auth check: JWT first, then legacy UUID fallback
+        if (Auth.isLoggedIn()) {
+            try {
+                const me = await api.getMe();
+                this.userId = me.id;
+            } catch {
+                // Token invalid — try refresh
+                const refreshed = await Auth.refreshTokens();
+                if (refreshed) {
+                    try {
+                        const me = await api.getMe();
+                        this.userId = me.id;
+                    } catch {
+                        this.showAuthModal();
+                        return;
+                    }
+                } else {
+                    this.showAuthModal();
+                    return;
+                }
+            }
             this.loadViewData('dashboard');
+        } else if (Auth.isLegacyUser()) {
+            // Has old UUID but no JWT — still works via dual-mode
+            this.userId = localStorage.getItem('coach_user_id');
+            this.loadViewData('dashboard');
+        } else {
+            this.showAuthModal();
+            return;
         }
 
+        this._bindForms();
+        this.updateGreeting();
+    },
+
+    _bindForms() {
         // Bind setup form
         const form = document.getElementById('setup-form');
         if (form) {
@@ -112,8 +138,41 @@ const App = {
             mealForm.addEventListener('submit', (e) => this.handleMealLog(e));
         }
 
-        // Set greeting based on time
-        this.updateGreeting();
+        // Bind auth forms
+        this._bindAuthForms();
+    },
+
+    _bindAuthForms() {
+        // Login form
+        const loginForm = document.getElementById('login-form');
+        if (loginForm) {
+            loginForm.addEventListener('submit', (e) => this.handleLogin(e));
+        }
+
+        // Register form
+        const registerForm = document.getElementById('register-form');
+        if (registerForm) {
+            registerForm.addEventListener('submit', (e) => this.handleRegister(e));
+        }
+
+        // Toggle links
+        document.getElementById('show-register')?.addEventListener('click', (e) => {
+            e.preventDefault();
+            document.getElementById('login-form').style.display = 'none';
+            document.getElementById('register-form').style.display = 'block';
+            document.getElementById('auth-title').textContent = 'Create Account';
+            document.getElementById('auth-subtitle').textContent = 'Set up your fitness coaching account.';
+            document.getElementById('auth-error').style.display = 'none';
+        });
+
+        document.getElementById('show-login')?.addEventListener('click', (e) => {
+            e.preventDefault();
+            document.getElementById('register-form').style.display = 'none';
+            document.getElementById('login-form').style.display = 'block';
+            document.getElementById('auth-title').textContent = 'Welcome Back';
+            document.getElementById('auth-subtitle').textContent = 'Sign in to your account.';
+            document.getElementById('auth-error').style.display = 'none';
+        });
     },
 
     updateGreeting() {
@@ -125,29 +184,98 @@ const App = {
         else el.textContent = 'Good evening 🌙';
     },
 
+    showAuthModal() {
+        this._bindAuthForms();
+        const modal = document.getElementById('auth-modal');
+        if (modal) modal.style.display = 'flex';
+    },
+
     showSetup() {
         const modal = document.getElementById('setup-modal');
         if (modal) modal.style.display = 'flex';
     },
 
+    _showAuthError(msg) {
+        const el = document.getElementById('auth-error');
+        if (el) {
+            el.textContent = msg;
+            el.style.display = 'block';
+        }
+    },
+
+    async handleLogin(e) {
+        e.preventDefault();
+        const form = e.target;
+        const btn = document.getElementById('btn-login');
+
+        await this._runAction('login', async () => {
+            const data = await Auth.login(
+                form.username.value,
+                form.password.value,
+            );
+            this.userId = data.user_id;
+            document.getElementById('auth-modal').style.display = 'none';
+            this._bindForms();
+            this.loadViewData('dashboard');
+            this.updateGreeting();
+        }, {
+            btn,
+            loadingText: 'Signing in…',
+            defaultText: 'Sign In',
+            errorPrefix: 'Login failed',
+            onError: (err) => this._showAuthError(err.message),
+        });
+    },
+
+    async handleRegister(e) {
+        e.preventDefault();
+        const form = e.target;
+        const btn = document.getElementById('btn-register');
+
+        // Validate confirm password
+        if (form.password.value !== form.confirm.value) {
+            this._showAuthError('Passwords do not match');
+            return;
+        }
+
+        await this._runAction('register', async () => {
+            const data = await Auth.register(
+                form.username.value,
+                form.password.value,
+                form.email.value,
+            );
+            this.userId = data.user_id;
+            document.getElementById('auth-modal').style.display = 'none';
+
+            // Bind forms (including setup form) then show profile setup
+            this._bindForms();
+            this.showSetup();
+        }, {
+            btn,
+            loadingText: 'Creating account…',
+            defaultText: 'Create Account',
+            errorPrefix: 'Registration failed',
+            onError: (err) => this._showAuthError(err.message),
+        });
+    },
+
     async handleSetup(e) {
         e.preventDefault();
         const form = e.target;
-        const userId = crypto.randomUUID ? crypto.randomUUID() : 'user-' + Date.now();
         const btn = form.querySelector('button');
 
         await this._runAction('setup', async () => {
             await api.createProfile({
-                user_id: userId,
+                user_id: this.userId,
                 goal: form.goal.value,
                 days_per_week: parseInt(form.days_per_week.value),
                 target_calories: parseInt(form.target_calories.value),
                 target_protein_g: parseInt(form.target_protein_g.value),
             });
-            this.userId = userId;
-            localStorage.setItem('coach_user_id', userId);
             document.getElementById('setup-modal').style.display = 'none';
+            this._bindForms();
             this.loadViewData('dashboard');
+            this.updateGreeting();
         }, {
             btn,
             loadingText: 'Setting up…',

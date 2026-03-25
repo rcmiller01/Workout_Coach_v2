@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc, func
 from app.database import get_db
+from app.api.deps import get_optional_user
 from app.models.user import User, UserProfile, WeightEntry
 from app.schemas.profile import ProfileCreate, ProfileUpdate, ProfileResponse
 from app.schemas.plan import (
@@ -20,8 +21,11 @@ router = APIRouter(prefix="/profile", tags=["Profile"])
 weight_sync_service = WeightSyncService()
 
 @router.post("/", response_model=ProfileResponse, status_code=201)
-async def create_profile(data: ProfileCreate, db: AsyncSession = Depends(get_db)):
+async def create_profile(data: ProfileCreate, current_user: User | None = Depends(get_optional_user), db: AsyncSession = Depends(get_db)):
     """Create a new user profile."""
+    data.user_id = current_user.id if current_user else data.user_id
+    if not data.user_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
     # Check if profile already exists for this user
     existing = await db.execute(
         select(UserProfile).where(UserProfile.user_id == data.user_id)
@@ -64,8 +68,11 @@ async def create_profile(data: ProfileCreate, db: AsyncSession = Depends(get_db)
     return profile
 
 @router.get("/{user_id}", response_model=ProfileResponse)
-async def get_profile(user_id: str, db: AsyncSession = Depends(get_db)):
+async def get_profile(user_id: str = None, current_user: User | None = Depends(get_optional_user), db: AsyncSession = Depends(get_db)):
     """Get a user's profile."""
+    user_id = current_user.id if current_user else user_id
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
     result = await db.execute(
         select(UserProfile).where(UserProfile.user_id == user_id)
     )
@@ -76,11 +83,15 @@ async def get_profile(user_id: str, db: AsyncSession = Depends(get_db)):
 
 @router.put("/{user_id}", response_model=ProfileResponse)
 async def update_profile(
-    user_id: str,
     data: ProfileUpdate,
+    user_id: str = None,
+    current_user: User | None = Depends(get_optional_user),
     db: AsyncSession = Depends(get_db),
 ):
     """Update a user's profile."""
+    user_id = current_user.id if current_user else user_id
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
     result = await db.execute(
         select(UserProfile).where(UserProfile.user_id == user_id)
     )
@@ -103,8 +114,11 @@ async def update_profile(
     return profile
 
 @router.delete("/{user_id}", status_code=204)
-async def delete_profile(user_id: str, db: AsyncSession = Depends(get_db)):
+async def delete_profile(user_id: str = None, current_user: User | None = Depends(get_optional_user), db: AsyncSession = Depends(get_db)):
     """Delete a user's profile."""
+    user_id = current_user.id if current_user else user_id
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
     result = await db.execute(
         select(UserProfile).where(UserProfile.user_id == user_id)
     )
@@ -116,8 +130,11 @@ async def delete_profile(user_id: str, db: AsyncSession = Depends(get_db)):
     await db.commit()
 
 @router.post("/weight", status_code=201)
-async def log_weight(data: WeightEntryRequest, db: AsyncSession = Depends(get_db)):
+async def log_weight(data: WeightEntryRequest, current_user: User | None = Depends(get_optional_user), db: AsyncSession = Depends(get_db)):
     """Log manual body weight."""
+    data.user_id = current_user.id if current_user else data.user_id
+    if not data.user_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
     entry = WeightEntry(
         user_id=data.user_id,
         weight_kg=data.weight_kg,
@@ -150,7 +167,7 @@ async def log_weight(data: WeightEntryRequest, db: AsyncSession = Depends(get_db
 
 
 @router.post("/weight/sync", response_model=WeightSyncResult, status_code=201)
-async def sync_weight(data: WeightSyncRequest, db: AsyncSession = Depends(get_db)):
+async def sync_weight(data: WeightSyncRequest, current_user: User | None = Depends(get_optional_user), db: AsyncSession = Depends(get_db)):
     """
     Sync a weight entry from an external source (HealthKit, Google Fit, etc.).
 
@@ -162,6 +179,9 @@ async def sync_weight(data: WeightSyncRequest, db: AsyncSession = Depends(get_db
 
     Returns sync status and whether a replan was triggered.
     """
+    data.user_id = current_user.id if current_user else data.user_id
+    if not data.user_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
     status, entry, replan_triggered, revision_id = await weight_sync_service.sync_weight(
         db=db,
         user_id=data.user_id,
@@ -201,7 +221,7 @@ async def sync_weight(data: WeightSyncRequest, db: AsyncSession = Depends(get_db
 
 
 @router.get("/weight/latest/{user_id}", response_model=LatestWeightResponse)
-async def get_latest_weight(user_id: str, db: AsyncSession = Depends(get_db)):
+async def get_latest_weight(user_id: str = None, current_user: User | None = Depends(get_optional_user), db: AsyncSession = Depends(get_db)):
     """
     Get the latest weight entry with source metadata and trend info.
 
@@ -211,6 +231,9 @@ async def get_latest_weight(user_id: str, db: AsyncSession = Depends(get_db)):
     - trend: up | down | stable
     - delta_kg: change from previous entry
     """
+    user_id = current_user.id if current_user else user_id
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
     result = await weight_sync_service.get_latest_weight(db, user_id)
     if not result:
         raise HTTPException(status_code=404, detail="No weight entries found")
@@ -218,12 +241,15 @@ async def get_latest_weight(user_id: str, db: AsyncSession = Depends(get_db)):
     return LatestWeightResponse(**result)
 
 @router.get("/weight/history/{user_id}")
-async def get_weight_history(user_id: str, db: AsyncSession = Depends(get_db)):
+async def get_weight_history(user_id: str = None, current_user: User | None = Depends(get_optional_user), db: AsyncSession = Depends(get_db)):
     """
     Retrieve weight history and plan revisions for progress tracking.
 
     Weight entries include source metadata (manual, healthkit, google_fit, import).
     """
+    user_id = current_user.id if current_user else user_id
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
     # 1. Weight Entries
     res = await db.execute(
         select(WeightEntry).where(WeightEntry.user_id == user_id)

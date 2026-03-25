@@ -1,12 +1,13 @@
 """
 AI Fitness Coach v1 — Dashboard API Route
 """
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc
 from datetime import datetime, timezone
 from app.database import get_db
-from app.models.user import UserProfile
+from app.api.deps import get_optional_user
+from app.models.user import User, UserProfile
 from app.models.plan import WeeklyPlan, WorkoutLog, MealLog, AdherenceRecord, PlanRevision
 from app.schemas.plan import DashboardResponse, PlanRevisionResponse
 
@@ -28,11 +29,14 @@ PERSONA_GREETINGS = {
 }
 
 @router.get("/dashboard/{user_id}", response_model=DashboardResponse)
-async def get_dashboard(user_id: str, db: AsyncSession = Depends(get_db)):
+async def get_dashboard(user_id: str = None, current_user: User | None = Depends(get_optional_user), db: AsyncSession = Depends(get_db)):
     """
     Get the today-view dashboard — the primary screen of the app.
     Combines: today's workout + meals + progress snapshot + coaching message + plan revisions.
     """
+    user_id = current_user.id if current_user else user_id
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
     today = datetime.now(timezone.utc)
     day_names = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
     today_name = day_names[today.weekday()]

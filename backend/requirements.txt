@@ -22,6 +22,10 @@ pydantic-settings>=2.7.0
 # --- LLM Integration ---
 litellm>=1.55.0
 
+# --- Authentication ---
+passlib[bcrypt]>=1.7.4
+python-jose[cryptography]>=3.3.0
+
 # --- Utilities ---
 python-dotenv>=1.0.1
 python-dateutil>=2.9.0

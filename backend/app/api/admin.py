@@ -14,6 +14,7 @@ from datetime import datetime, timezone
 import json
 
 from app.database import get_db
+from app.api.deps import get_current_user
 from app.services.seed_data import SeedDataService, DEMO_USER_ID
 from app.services.import_service import ImportService
 from app.models.user import User, UserProfile, WeightEntry
@@ -61,6 +62,7 @@ async def seed_demo_data(
         DEMO_USER_ID,
         description="User ID to use for demo data"
     ),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -108,6 +110,7 @@ async def seed_demo_data(
 @router.get("/seed/demo/status", response_model=DemoUserSummary)
 async def get_demo_status(
     user_id: str = Query(DEMO_USER_ID, description="User ID to check"),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -122,6 +125,7 @@ async def get_demo_status(
 @router.delete("/seed/demo", status_code=204)
 async def clear_demo_data(
     user_id: str = Query(DEMO_USER_ID, description="User ID to clear"),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -166,6 +170,7 @@ async def export_audit_bundle(
     include_plans: bool = Query(True, description="Include plan history"),
     include_revisions: bool = Query(True, description="Include revision history"),
     include_workout_logs: bool = Query(True, description="Include workout logs"),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -185,6 +190,9 @@ async def export_audit_bundle(
     - Data portability
     - Backup before destructive operations
     """
+    if current_user.id != user_id:
+        raise HTTPException(status_code=403, detail="Can only export your own data")
+
     bundle: dict[str, Any] = {
         "metadata": {},
         "user": None,
@@ -402,6 +410,7 @@ async def export_audit_bundle(
 @router.get("/export/{user_id}/summary")
 async def get_export_summary(
     user_id: str,
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -409,6 +418,9 @@ async def get_export_summary(
 
     Useful for checking data existence before export.
     """
+    if current_user.id != user_id:
+        raise HTTPException(status_code=403, detail="Can only export your own data")
+
     from sqlalchemy import func
 
     counts = {}
@@ -479,6 +491,7 @@ async def get_export_summary(
 @router.post("/import/preview", response_model=ImportPreviewResponse)
 async def preview_import(
     request: ImportPreviewRequest,
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -502,6 +515,7 @@ async def preview_import(
 @router.post("/import/restore", response_model=ImportRestoreResponse)
 async def restore_from_bundle(
     request: ImportRestoreRequest,
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """

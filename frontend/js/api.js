@@ -12,13 +12,33 @@ const api = {
             method,
             headers: { 'Content-Type': 'application/json' },
         };
+
+        // Inject JWT auth header if available
+        const token = Auth.getAccessToken();
+        if (token) {
+            opts.headers['Authorization'] = `Bearer ${token}`;
+        }
+
         if (body) opts.body = JSON.stringify(body);
 
         try {
-            const res = await fetch(`${API_BASE}${path}`, opts);
+            let res = await fetch(`${API_BASE}${path}`, opts);
+
+            // Auto-refresh on 401 if we had a token
+            if (res.status === 401 && token) {
+                const refreshed = await Auth.refreshTokens();
+                if (refreshed) {
+                    opts.headers['Authorization'] = `Bearer ${Auth.getAccessToken()}`;
+                    res = await fetch(`${API_BASE}${path}`, opts);
+                } else {
+                    Auth.clearTokens();
+                    window.location.reload();
+                    throw new Error('Session expired');
+                }
+            }
+
             if (!res.ok) {
                 const error = await res.json().catch(() => ({ detail: res.statusText }));
-                // Handle Pydantic validation errors (detail is an array) vs string errors
                 let errorMsg;
                 if (Array.isArray(error.detail)) {
                     errorMsg = error.detail.map(e => e.msg || e.message || JSON.stringify(e)).join(', ');
@@ -33,6 +53,11 @@ const api = {
             console.error(`API ${method} ${path} failed:`, err);
             throw err;
         }
+    },
+
+    // ── Auth ──
+    getMe() {
+        return this.request('GET', '/auth/me');
     },
 
     // ── Dashboard ──

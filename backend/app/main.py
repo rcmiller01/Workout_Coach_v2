@@ -19,6 +19,7 @@ from app.api import (
     admin_router,
     review_router,
 )
+from app.api.auth import router as auth_router
 import logging
 import os
 from app.models.user import User, UserProfile, WeightEntry
@@ -102,6 +103,7 @@ app.add_middleware(
 # ─── Routes ───────────────────────────────────────────────────
 
 # API Routes
+app.include_router(auth_router, prefix="/api", tags=["Auth"])
 app.include_router(dashboard_router, prefix="/api", tags=["Dashboard"])
 app.include_router(profile_router, prefix="/api", tags=["Profile"])
 app.include_router(planning_router, prefix="/api", tags=["Planning"])

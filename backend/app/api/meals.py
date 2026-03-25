@@ -1,11 +1,13 @@
 """
 AI Fitness Coach v1 — Meals API Routes
 """
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc
 from datetime import datetime, timedelta, timezone
 from app.database import get_db
+from app.api.deps import get_optional_user
+from app.models.user import User
 from app.models.plan import WeeklyPlan
 from app.schemas.meal import RecipeImportRequest, MealLogCreate, MealLogResponse
 from app.models.plan import MealLog
@@ -16,8 +18,11 @@ router = APIRouter(prefix="/meals", tags=["Meals"])
 
 
 @router.get("/today/{user_id}")
-async def get_todays_meals(user_id: str, db: AsyncSession = Depends(get_db)):
+async def get_todays_meals(user_id: str = None, current_user: User | None = Depends(get_optional_user), db: AsyncSession = Depends(get_db)):
     """Get today's planned meals and the active nutrition revision context."""
+    user_id = current_user.id if current_user else user_id
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
     from app.models.user import UserProfile
     from app.models.plan import PlanRevision
     from app.schemas.plan import PlanRevisionResponse
@@ -121,8 +126,11 @@ async def get_todays_meals(user_id: str, db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/plan/{user_id}")
-async def get_meal_plan(user_id: str, db: AsyncSession = Depends(get_db)):
+async def get_meal_plan(user_id: str = None, current_user: User | None = Depends(get_optional_user), db: AsyncSession = Depends(get_db)):
     """Get the current full meal plan."""
+    user_id = current_user.id if current_user else user_id
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
     result = await db.execute(
         select(WeeklyPlan)
         .where(WeeklyPlan.user_id == user_id, WeeklyPlan.status == "active")
@@ -141,7 +149,7 @@ async def get_meal_plan(user_id: str, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/import-recipe")
-async def import_recipe(request: RecipeImportRequest):
+async def import_recipe(request: RecipeImportRequest, current_user: User | None = Depends(get_optional_user)):
     """Import a recipe from a URL via Tandoor."""
     tandoor = TandoorProvider(
         base_url=settings.tandoor_base_url,
@@ -174,7 +182,7 @@ class MacroEstimateRequest(BaseModel):
 
 
 @router.post("/estimate-macros")
-async def estimate_macros(request: MacroEstimateRequest):
+async def estimate_macros(request: MacroEstimateRequest, current_user: User | None = Depends(get_optional_user)):
     """Use LLM to estimate macros for a meal description."""
     from app.engine.planner import LLMPlanner
     import json
@@ -226,8 +234,11 @@ Be realistic and use common portion sizes. If the description is vague, estimate
 
 
 @router.post("/log", response_model=MealLogResponse, status_code=201)
-async def log_meal(data: MealLogCreate, user_id: str, db: AsyncSession = Depends(get_db)):
+async def log_meal(data: MealLogCreate, user_id: str = Query(None), current_user: User | None = Depends(get_optional_user), db: AsyncSession = Depends(get_db)):
     """Log a consumed meal (custom or from plan)."""
+    user_id = current_user.id if current_user else user_id
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
     # Get active plan ID if exists
     plan_id = None
     if data.is_planned:
@@ -303,8 +314,11 @@ async def _sync_meal_to_wger(log, db):
 
 
 @router.delete("/log/{meal_id}", status_code=204)
-async def delete_meal_log(meal_id: str, user_id: str, db: AsyncSession = Depends(get_db)):
+async def delete_meal_log(meal_id: str, user_id: str = Query(None), current_user: User | None = Depends(get_optional_user), db: AsyncSession = Depends(get_db)):
     """Delete a logged meal entry."""
+    user_id = current_user.id if current_user else user_id
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
     result = await db.execute(
         select(MealLog).where(MealLog.id == meal_id, MealLog.user_id == user_id)
     )
@@ -318,12 +332,16 @@ async def delete_meal_log(meal_id: str, user_id: str, db: AsyncSession = Depends
 
 @router.get("/history/{user_id}")
 async def get_meal_history(
-    user_id: str,
+    user_id: str = None,
     limit: int = 50,
     date: str = None,
+    current_user: User | None = Depends(get_optional_user),
     db: AsyncSession = Depends(get_db),
 ):
     """Get meal log history for a user. Optionally filter by date (YYYY-MM-DD)."""
+    user_id = current_user.id if current_user else user_id
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
     query = select(MealLog).where(MealLog.user_id == user_id)
 
     if date:

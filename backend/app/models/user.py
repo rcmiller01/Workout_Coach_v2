@@ -21,6 +21,7 @@ class User(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     is_active = Column(Boolean, default=True)
+    password_hash = Column(String(255), nullable=True)  # nullable for legacy migration
 
     # External provider tokens (stored for server-side API calls)
     wger_token = Column(String(255), nullable=True)

@@ -302,12 +302,63 @@
         </div>
     </div>
 
-    <!-- Setup Modal (first-time use) -->
+    <!-- Auth Modal (login / register) -->
+    <div id="auth-modal" class="modal" style="display: none;">
+        <div class="modal-overlay"></div>
+        <div class="modal-content">
+            <h2 id="auth-title">Welcome to AI Fitness Coach</h2>
+            <p id="auth-subtitle" style="color: var(--text-secondary); margin-bottom: 16px;">Sign in or create an account to get started.</p>
+
+            <div id="auth-error" style="display:none; background:rgba(239,68,68,0.15); color:#ef4444; padding:8px 12px; border-radius:6px; margin-bottom:12px; font-size:13px;"></div>
+
+            <!-- Login Form -->
+            <form id="login-form">
+                <div class="form-group">
+                    <label for="login-username">Username</label>
+                    <input type="text" id="login-username" name="username" required minlength="3" autocomplete="username">
+                </div>
+                <div class="form-group">
+                    <label for="login-password">Password</label>
+                    <input type="password" id="login-password" name="password" required minlength="8" autocomplete="current-password">
+                </div>
+                <button type="submit" class="btn-primary btn-full" id="btn-login">Sign In</button>
+                <p style="text-align:center; margin-top:12px; font-size:13px; color:var(--text-secondary);">
+                    Don't have an account? <a href="#" id="show-register" style="color:var(--accent-blue);">Register</a>
+                </p>
+            </form>
+
+            <!-- Register Form (hidden by default) -->
+            <form id="register-form" style="display:none;">
+                <div class="form-group">
+                    <label for="reg-username">Username</label>
+                    <input type="text" id="reg-username" name="username" required minlength="3" autocomplete="username">
+                </div>
+                <div class="form-group">
+                    <label for="reg-email">Email (optional)</label>
+                    <input type="email" id="reg-email" name="email" autocomplete="email">
+                </div>
+                <div class="form-group">
+                    <label for="reg-password">Password</label>
+                    <input type="password" id="reg-password" name="password" required minlength="8" autocomplete="new-password">
+                </div>
+                <div class="form-group">
+                    <label for="reg-confirm">Confirm Password</label>
+                    <input type="password" id="reg-confirm" name="confirm" required minlength="8" autocomplete="new-password">
+                </div>
+                <button type="submit" class="btn-primary btn-full" id="btn-register">Create Account</button>
+                <p style="text-align:center; margin-top:12px; font-size:13px; color:var(--text-secondary);">
+                    Already have an account? <a href="#" id="show-login" style="color:var(--accent-blue);">Sign In</a>
+                </p>
+            </form>
+        </div>
+    </div>
+
+    <!-- Profile Setup Modal (shown after registration) -->
     <div id="setup-modal" class="modal" style="display: none;">
         <div class="modal-overlay"></div>
         <div class="modal-content">
-            <h2>Welcome to AI Fitness Coach</h2>
-            <p>Let's set up your profile to get started.</p>
+            <h2>Set Up Your Profile</h2>
+            <p style="color: var(--text-secondary); margin-bottom: 16px;">Tell us about your fitness goals.</p>
             <form id="setup-form">
                 <div class="form-group">
                     <label for="setup-goal">Primary Goal</label>
@@ -330,12 +381,13 @@
                     <label for="setup-protein">Protein Target (g)</label>
                     <input type="number" id="setup-protein" name="target_protein_g" value="180" min="50" max="400">
                 </div>
-                <button type="submit" class="btn-primary btn-full">Get Started →</button>
+                <button type="submit" class="btn-primary btn-full">Get Started</button>
             </form>
         </div>
     </div>
 
-    <script src="js/api.js?v=2"></script>
+    <script src="js/auth.js?v=3"></script>
+    <script src="js/api.js?v=3"></script>
     <script src="js/router.js?v=2"></script>
     <script src="js/components/dashboard.js?v=2"></script>
     <script src="js/components/workout.js?v=2"></script>
