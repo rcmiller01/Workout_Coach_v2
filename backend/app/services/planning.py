@@ -5,7 +5,7 @@ Higher-level orchestration logic for the weekly planning workflow.
 Handles locking, versioning, and rule validation.
 """
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional, List, Set
 
 from app.engine.planner import LLMPlanner
@@ -187,8 +187,8 @@ class PlanningService:
                     plan = NormalizedPlan(
                         plan_id=str(uuid.uuid4()),
                         user_id=user_id,
-                        week_start=datetime.now().strftime("%Y-%m-%d"),
-                        week_end=(datetime.now() + timedelta(days=7)).strftime("%Y-%m-%d"),
+                        week_start=datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+                        week_end=(datetime.now(timezone.utc) + timedelta(days=7)).strftime("%Y-%m-%d"),
                         workout_plan=workout_days,
                         meal_plan=meal_days,
                         is_replan=is_replan,
@@ -198,24 +198,33 @@ class PlanningService:
                     # 6. Validate & Self-Correct
                     # Convert Pydantic models back to dict for the current rules engine (to be updated later)
                     plan_dict = plan.dict()
+                    # Rules engine expects {"days": [...]} wrapper, but plan.dict() returns raw lists
+                    workout_for_rules = plan_dict["workout_plan"] if isinstance(plan_dict["workout_plan"], dict) else {"days": plan_dict["workout_plan"]}
+                    meal_for_rules = plan_dict["meal_plan"] if isinstance(plan_dict["meal_plan"], dict) else {"days": plan_dict["meal_plan"]}
                     validation = self.rules.validate_plan(
-                        plan_dict["workout_plan"], 
-                        plan_dict["meal_plan"], 
+                        workout_for_rules,
+                        meal_for_rules,
                         profile
                     )
                     
-                    plan.rules_applied = validation.get("rules_applied", [])
-                    
+                    plan.rules_applied = (
+                        validation.get("workout", {}).get("rules_applied", []) +
+                        validation.get("meal", {}).get("rules_applied", [])
+                    )
+
                     if validation.get("is_valid", False):
                         logger.info("plan_validated", user_id=user_id)
                         return plan
-                    
+
                     # Store as "best attempt" if valid enough
-                    logger.warning("validation_failed", user_id=user_id, errors=validation.get("errors", []))
+                    workout_errors = validation.get("workout", {}).get("errors", [])
+                    meal_errors = validation.get("meal", {}).get("errors", [])
+                    logger.warning("validation_failed", user_id=user_id, errors=workout_errors + meal_errors)
                     best_plan = plan
 
                 except Exception as e:
-                    logger.error("generation_error", user_id=user_id, error=str(e))
+                    import traceback
+                    logger.error("generation_error", user_id=user_id, error=str(e), traceback=traceback.format_exc())
                     if attempt == max_retries: raise
 
             return best_plan

@@ -4,7 +4,7 @@ AI Fitness Coach v1 — Weight Sync Service
 Handles external weight sync with deduplication and replan evaluation.
 Keeps the architecture provider-based for future biometric sources.
 """
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional, Tuple
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc, and_, or_
@@ -49,7 +49,7 @@ class WeightSyncService:
             - replan_triggered: Whether a replan was triggered
             - revision_id: ID of the revision if replan was triggered
         """
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         measured_at = measured_at or now
 
         # 1. Check for duplicate by source_id (exact match)
@@ -234,7 +234,7 @@ class WeightSyncService:
         last_revision_date = result.scalar_one_or_none()
 
         if last_revision_date:
-            days_since = (datetime.utcnow() - last_revision_date).days
+            days_since = (datetime.now(timezone.utc) - last_revision_date).days
             if days_since < cooldown_days:
                 logger.info(
                     "weight_sync_replan_cooldown",

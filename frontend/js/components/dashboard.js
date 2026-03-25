@@ -46,19 +46,23 @@ const DashboardComponent = {
             document.getElementById('btn-start-workout').textContent = 'Generate Plan →';
         }
 
-        // Macro rings
+        // Macro rings — show actuals vs targets
         const targets = data.macro_targets || {};
+        const actuals = data.macro_actuals || {};
         if (targets.calories) {
-            document.getElementById('val-calories').textContent = targets.calories;
-            this.setRingProgress('ring-calories-fill', 0.5);
+            const aCal = actuals.calories || 0;
+            document.getElementById('val-calories').textContent = aCal > 0 ? `${aCal}` : targets.calories;
+            this.setRingProgress('ring-calories-fill', targets.calories > 0 ? Math.min(1, aCal / targets.calories) : 0);
         }
         if (targets.protein_g) {
-            document.getElementById('val-protein').textContent = targets.protein_g;
-            this.setRingProgress('ring-protein-fill', 0.4);
+            const aPro = actuals.protein_g || 0;
+            document.getElementById('val-protein').textContent = aPro > 0 ? `${Math.round(aPro)}` : targets.protein_g;
+            this.setRingProgress('ring-protein-fill', targets.protein_g > 0 ? Math.min(1, aPro / targets.protein_g) : 0);
         }
         if (targets.carbs_g) {
-            document.getElementById('val-carbs').textContent = targets.carbs_g;
-            this.setRingProgress('ring-carbs-fill', 0.3);
+            const aCarb = actuals.carbs_g || 0;
+            document.getElementById('val-carbs').textContent = aCarb > 0 ? `${Math.round(aCarb)}` : targets.carbs_g;
+            this.setRingProgress('ring-carbs-fill', targets.carbs_g > 0 ? Math.min(1, aCarb / targets.carbs_g) : 0);
         }
 
         // Stats (with null-safe element access) - display in lbs
@@ -188,27 +192,26 @@ const DashboardComponent = {
 
         // Approve (pending)
         if (isPending) {
-            document.getElementById('btn-approve-replan')?.addEventListener('click', async (e) => {
-                e.target.textContent = 'Approving...';
-                e.target.disabled = true;
-                try {
+            document.getElementById('btn-approve-replan')?.addEventListener('click', async () => {
+                const approveBtn = document.getElementById('btn-approve-replan');
+                await App._runAction('approveReplan', async () => {
                     await api.approveReplan(actionable.id);
                     localStorage.setItem('last_ack_revision', actionable.id);
                     App.loadViewData('dashboard');
-                } catch (err) {
-                    alert('Approval failed: ' + err.message);
-                    e.target.textContent = 'Approve Change';
-                    e.target.disabled = false;
-                }
+                }, {
+                    btn: approveBtn,
+                    loadingText: 'Approving…',
+                    defaultText: 'Approve Change',
+                    errorPrefix: 'Approval failed',
+                });
             });
         }
 
         // Undo (auto-applied)
         if (isApplied) {
-            document.getElementById('btn-undo-replan')?.addEventListener('click', async (e) => {
-                e.target.textContent = 'Reverting...';
-                e.target.disabled = true;
-                try {
+            document.getElementById('btn-undo-replan')?.addEventListener('click', async () => {
+                const undoBtn = document.getElementById('btn-undo-replan');
+                await App._runAction('undoReplan', async () => {
                     await api.undoReplan(actionable.id);
                     localStorage.setItem('last_ack_revision', actionable.id);
 
@@ -220,11 +223,12 @@ const DashboardComponent = {
                         </div>
                     `;
                     setTimeout(() => App.loadViewData('dashboard'), 2000);
-                } catch (err) {
-                    alert('Undo failed: ' + err.message);
-                    e.target.textContent = 'Undo Adjustment';
-                    e.target.disabled = false;
-                }
+                }, {
+                    btn: undoBtn,
+                    loadingText: 'Reverting…',
+                    defaultText: 'Undo Adjustment',
+                    errorPrefix: 'Undo failed',
+                });
             });
         }
 

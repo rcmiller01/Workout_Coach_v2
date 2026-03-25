@@ -5,7 +5,7 @@ Creates demo/test data for rapid development and testing.
 Idempotent - can be called multiple times safely.
 """
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete
@@ -163,7 +163,7 @@ class SeedDataService:
         if result.scalar_one_or_none():
             return 0
 
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         base_weight = 85.0
         entries = []
 
@@ -213,7 +213,7 @@ class SeedDataService:
         if result.scalar_one_or_none():
             return None
 
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         # Find Monday of current week
         days_since_monday = now.weekday()
         week_start = now - timedelta(days=days_since_monday)
@@ -406,7 +406,7 @@ class SeedDataService:
         if result.scalar_one_or_none():
             return 0
 
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         revisions = [
             # Superseded revision (older)
             PlanRevision(

@@ -110,6 +110,21 @@ app.include_router(meals_router, prefix="/api", tags=["Meals"])
 app.include_router(admin_router)  # Has its own /api/admin prefix
 app.include_router(review_router)  # Has its own /api/review prefix
 
+# Disable caching for static files in development
+if settings.debug:
+    from starlette.middleware.base import BaseHTTPMiddleware
+    from starlette.requests import Request
+    from starlette.responses import Response
+
+    class NoCacheMiddleware(BaseHTTPMiddleware):
+        async def dispatch(self, request: Request, call_next):
+            response = await call_next(request)
+            if not request.url.path.startswith("/api/"):
+                response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+            return response
+
+    app.add_middleware(NoCacheMiddleware)
+
 # Static Files (Frontend PWA)
 _frontend_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "frontend")
 app.mount("/", StaticFiles(directory=_frontend_dir, html=True), name="frontend")

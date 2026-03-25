@@ -17,7 +17,7 @@ const MealsComponent = {
             </div>
         `;
 
-        // Fetch today's logged meals
+        // Fetch today's logged meals (UTC date to match server storage)
         const today = new Date().toISOString().split('T')[0];
         let loggedMeals = [];
         try {
@@ -59,7 +59,10 @@ const MealsComponent = {
                     <div class="meal-card" style="position: relative; opacity: 0.9; border-left: 3px solid var(--accent-blue);">
                         <div style="display: flex; justify-content: space-between; align-items: center;">
                             <div class="meal-type">${typeLabel}</div>
-                            <span style="font-size: 10px; color: var(--text-tertiary);">${new Date(meal.date).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <span style="font-size: 10px; color: var(--text-tertiary);">${new Date(meal.date).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                                <button onclick="App.deleteMealLog('${meal.id}')" title="Remove" style="background: none; border: none; color: var(--accent-red, #ef4444); cursor: pointer; font-size: 14px; padding: 2px 4px; opacity: 0.6; transition: opacity 0.2s;" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0.6">✕</button>
+                            </div>
                         </div>
                         <div class="meal-name" style="margin-top: 4px; font-weight: 600;">${meal.name}</div>
                         ${meal.notes ? `<div style="font-size: 11px; color: var(--accent-amber); margin: 4px 0; font-style: italic;">↳ ${meal.notes}</div>` : ''}
@@ -117,11 +120,11 @@ const MealsComponent = {
                     </div>
                     <div style="flex:1; min-width: 80px; text-align: center; padding: 12px; background: rgba(255,255,255,0.03); border-radius: 8px;">
                         <div style="font-size: 12px; color: var(--text-tertiary); margin-bottom: 4px;">Carbs</div>
-                        <div style="font-size: 20px; font-weight: 700;">${ct.carbs_g}g</div>
+                        <div style="font-size: 20px; font-weight: 700;">${ct.carbs_g != null ? ct.carbs_g + 'g' : '—'}</div>
                     </div>
                     <div style="flex:1; min-width: 80px; text-align: center; padding: 12px; background: rgba(255,255,255,0.03); border-radius: 8px;">
                         <div style="font-size: 12px; color: var(--text-tertiary); margin-bottom: 4px;">Fat</div>
-                        <div style="font-size: 20px; font-weight: 700;">${ct.fat_g}g</div>
+                        <div style="font-size: 20px; font-weight: 700;">${ct.fat_g != null ? ct.fat_g + 'g' : '—'}</div>
                     </div>
                 </div>
             </div>
@@ -200,26 +203,51 @@ const MealsComponent = {
                     </div>`;
             }
 
+            // Build a set of logged planned meal names for visual distinction
+            const loggedPlannedNames = new Set(
+                loggedMeals
+                    .filter(m => m.is_planned)
+                    .map(m => m.name.toLowerCase().trim())
+            );
+
             // Individual meals
-            data.meals.forEach(meal => {
+            data.meals.forEach((meal, idx) => {
                 const typeLabel = this.formatMealType(meal.meal_type);
                 const servings = meal.servings ? `<span style="font-size: 11px; padding: 2px 6px; background: rgba(255,255,255,0.1); border-radius: 4px; margin-left: auto;">${meal.servings} servings</span>` : '';
-                
+                // Handle both flat macros (meal.calories) and nested macros (meal.macros.calories)
+                const cal = meal.calories || (meal.macros && meal.macros.calories) || 0;
+                const pro = meal.protein_g || (meal.macros && meal.macros.protein_g) || 0;
+                const carb = meal.carbs_g || (meal.macros && meal.macros.carbs_g) || 0;
+                const fat = meal.fat_g || (meal.macros && meal.macros.fat_g) || 0;
+
+                const isLogged = loggedPlannedNames.has((meal.name || '').toLowerCase().trim());
+
+                // Encode meal data for the log button
+                const mealJson = encodeURIComponent(JSON.stringify({
+                    meal_type: meal.meal_type, name: meal.name,
+                    calories: cal, protein_g: pro, carbs_g: carb, fat_g: fat,
+                    servings: meal.servings || 1, is_planned: true
+                }));
+
                 html += `
-                    <div class="meal-card" style="position: relative;">
+                    <div class="meal-card" style="position: relative; ${isLogged ? 'opacity: 0.5; border-left: 3px solid var(--accent-green, #10b981);' : ''}">
                         <div style="display: flex; justify-content: space-between; align-items: center;">
                             <div class="meal-type">${typeLabel}</div>
-                            ${servings}
+                            ${isLogged ? '<span style="font-size: 11px; padding: 2px 8px; background: rgba(16, 185, 129, 0.15); color: var(--accent-green, #10b981); border-radius: 4px; margin-left: auto;">✓ Logged</span>' : servings}
                         </div>
                         <div class="meal-name" style="margin-top: 4px; font-weight: 600;">${meal.name || 'Unnamed Meal'}</div>
                         ${meal.notes ? `<div style="font-size: 11px; color: var(--accent-amber); margin: 4px 0 8px; font-style: italic;">↳ ${meal.notes}</div>` : ''}
-                        
+
                         <div class="meal-macros" style="margin-top: 8px;">
-                            ${meal.calories ? `<div class="meal-macro"><strong>${meal.calories}</strong> kcal</div>` : ''}
-                            ${meal.protein_g ? `<div class="meal-macro"><strong>${meal.protein_g}</strong>g P</div>` : ''}
-                            ${meal.carbs_g ? `<div class="meal-macro"><strong>${meal.carbs_g}</strong>g C</div>` : ''}
-                            ${meal.fat_g ? `<div class="meal-macro"><strong>${meal.fat_g}</strong>g F</div>` : ''}
+                            ${cal ? `<div class="meal-macro"><strong>${cal}</strong> kcal</div>` : ''}
+                            ${pro ? `<div class="meal-macro"><strong>${pro}</strong>g P</div>` : ''}
+                            ${carb ? `<div class="meal-macro"><strong>${carb}</strong>g C</div>` : ''}
+                            ${fat ? `<div class="meal-macro"><strong>${fat}</strong>g F</div>` : ''}
                         </div>
+                        ${isLogged
+                            ? `<div style="margin-top: 10px; width: 100%; padding: 8px; font-size: 12px; text-align: center; color: var(--accent-green, #10b981); border: 1px solid rgba(16, 185, 129, 0.2); border-radius: 6px;">✓ Already logged</div>`
+                            : `<button onclick="App.logPlannedMeal('${mealJson}')" class="btn-secondary" style="margin-top: 10px; width: 100%; padding: 8px; font-size: 12px;">✓ Log as Eaten</button>`
+                        }
                     </div>`;
             });
         }

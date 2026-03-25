@@ -4,7 +4,7 @@ AI Fitness Coach v1 — Meals API Routes
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from app.database import get_db
 from app.models.plan import WeeklyPlan
 from app.schemas.meal import RecipeImportRequest, MealLogCreate, MealLogResponse
@@ -34,12 +34,12 @@ async def get_todays_meals(user_id: str, db: AsyncSession = Depends(get_db)):
     profile_result = await db.execute(select(UserProfile).where(UserProfile.user_id == user_id))
     profile = profile_result.scalar_one_or_none()
     
-    # Baseline Targets
+    # Baseline Targets (use profile values, falling back to sensible defaults for nulls)
     baseline_targets = {
-        "calories": profile.target_calories if profile else 2000,
-        "protein_g": profile.target_protein_g if profile else 150,
-        "carbs_g": profile.target_carbs_g if profile else 200,
-        "fat_g": profile.target_fat_g if profile else 70,
+        "calories": (profile.target_calories if profile else None) or 2000,
+        "protein_g": (profile.target_protein_g if profile else None) or 150,
+        "carbs_g": (profile.target_carbs_g if profile else None) or 200,
+        "fat_g": (profile.target_fat_g if profile else None) or 70,
     }
 
     if not plan:
@@ -87,14 +87,16 @@ async def get_todays_meals(user_id: str, db: AsyncSession = Depends(get_db)):
             sign = "+" if cal_adjust > 0 else ""
             active_adjustments.append(f"calories {sign}{cal_adjust}")
 
-    today = datetime.now()
+    today = datetime.now(timezone.utc)
     day_names = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
     today_name = day_names[today.weekday()]
 
     meal_plan = plan.meal_plan or {}
     today_meals = None
 
-    for day in meal_plan.get("days", []):
+    # Handle both formats: list of days or dict with "days" key
+    meal_days = meal_plan if isinstance(meal_plan, list) else meal_plan.get("days", [])
+    for day in meal_days:
         if day.get("day", "").lower() == today_name.lower():
             today_meals = day
             break
@@ -108,7 +110,7 @@ async def get_todays_meals(user_id: str, db: AsyncSession = Depends(get_db)):
         "date": today.strftime("%Y-%m-%d"),
         "day": today_name,
         "meals": today_meals.get("meals", []) if today_meals else [],
-        "totals": today_meals.get("totals", {}) if today_meals else {},
+        "totals": today_meals.get("totals", today_meals.get("daily_totals", {})) if today_meals else {},
         "plan_id": plan.id,
         "baseline_targets": baseline_targets,
         "current_targets": current_targets,
@@ -174,7 +176,7 @@ class MacroEstimateRequest(BaseModel):
 @router.post("/estimate-macros")
 async def estimate_macros(request: MacroEstimateRequest):
     """Use LLM to estimate macros for a meal description."""
-    import litellm
+    from app.engine.planner import LLMPlanner
     import json
 
     description = request.meal_name
@@ -199,47 +201,13 @@ Provide your best estimate for a typical serving. Return ONLY valid JSON in this
 Be realistic and use common portion sizes. If the description is vague, estimate for a typical restaurant-sized portion."""
 
     try:
-        model_string = f"ollama/{settings.llm_model}" if settings.llm_provider == "ollama" else settings.llm_model
-
-        response = await litellm.acompletion(
-            model=model_string,
-            messages=[
-                {"role": "system", "content": "You are a nutritionist expert. Estimate macros accurately based on typical portion sizes. Return only valid JSON."},
-                {"role": "user", "content": prompt}
-            ],
-            temperature=0.3,
-            max_tokens=500,
-            api_base=settings.llm_base_url if settings.llm_provider == "ollama" else None,
-            timeout=60,
+        planner = LLMPlanner()
+        content = await planner._call_llm(
+            prompt,
+            "You are a nutritionist expert. Estimate macros accurately based on typical portion sizes. Return only valid JSON.",
+            num_predict=256,
         )
-
-        content = response.choices[0].message.content
-
-        # Strip thinking tags if present
-        if "<think>" in content:
-            content = content.split("</think>")[-1].strip()
-
-        # Parse JSON
-        try:
-            result = json.loads(content)
-        except json.JSONDecodeError:
-            # Try to extract JSON from markdown blocks
-            if "```json" in content:
-                start = content.index("```json") + 7
-                end = content.index("```", start)
-                result = json.loads(content[start:end].strip())
-            elif "```" in content:
-                start = content.index("```") + 3
-                end = content.index("```", start)
-                result = json.loads(content[start:end].strip())
-            else:
-                # Try boundary finding
-                start = content.find("{")
-                end = content.rfind("}") + 1
-                if start >= 0 and end > start:
-                    result = json.loads(content[start:end])
-                else:
-                    raise ValueError("Could not parse JSON from LLM response")
+        result = planner._parse_json(content)
 
         return {
             "calories": int(result.get("calories", 0)),
@@ -276,7 +244,7 @@ async def log_meal(data: MealLogCreate, user_id: str, db: AsyncSession = Depends
     log = MealLog(
         user_id=user_id,
         plan_id=plan_id,
-        date=data.date or datetime.now(),
+        date=data.date or datetime.now(timezone.utc),
         meal_type=data.meal_type,
         name=data.name,
         calories=data.calories,
@@ -290,7 +258,62 @@ async def log_meal(data: MealLogCreate, user_id: str, db: AsyncSession = Depends
     db.add(log)
     await db.commit()
     await db.refresh(log)
+
+    # Sync to wger nutrition diary (fire-and-forget)
+    try:
+        await _sync_meal_to_wger(log, db)
+    except Exception:
+        pass  # Don't fail meal logging if wger sync fails
+
     return log
+
+
+async def _sync_meal_to_wger(log, db):
+    """Sync a meal log entry to wger's nutrition diary."""
+    from app.providers.wger import WgerProvider
+
+    wger = WgerProvider(base_url=settings.wger_base_url, api_token=settings.wger_api_token)
+    try:
+        # Get or create a nutrition plan
+        plans = await wger.get_nutrition_plans()
+        plan_list = plans.get("results", [])
+
+        if plan_list:
+            plan_id = plan_list[0]["id"]  # Use the most recent plan
+        else:
+            new_plan = await wger.create_nutrition_plan("AI Coach Nutrition Tracking")
+            plan_id = new_plan["id"]
+
+        # Add diary entry (wger uses ingredients, but we log the raw macro data)
+        await wger.add_nutrition_diary_entry(
+            plan_id=plan_id,
+            amount=log.calories or 0,  # Use calories as the amount for generic tracking
+            date_str=log.date.isoformat() if log.date else None,
+        )
+
+        log.synced_to_wger = "synced"
+        await db.commit()
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning(f"Failed to sync meal to wger: {e}")
+        log.synced_to_wger = "failed"
+        await db.commit()
+    finally:
+        await wger.close()
+
+
+@router.delete("/log/{meal_id}", status_code=204)
+async def delete_meal_log(meal_id: str, user_id: str, db: AsyncSession = Depends(get_db)):
+    """Delete a logged meal entry."""
+    result = await db.execute(
+        select(MealLog).where(MealLog.id == meal_id, MealLog.user_id == user_id)
+    )
+    log = result.scalar_one_or_none()
+    if not log:
+        raise HTTPException(status_code=404, detail="Meal log not found")
+    await db.delete(log)
+    await db.commit()
+    return None
 
 
 @router.get("/history/{user_id}")
@@ -304,10 +327,10 @@ async def get_meal_history(
     query = select(MealLog).where(MealLog.user_id == user_id)
 
     if date:
-        # Filter by specific date
+        # Filter by specific date (UTC day boundaries)
         try:
-            target_date = datetime.strptime(date, "%Y-%m-%d")
-            next_day = datetime(target_date.year, target_date.month, target_date.day + 1)
+            target_date = datetime.strptime(date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+            next_day = target_date + timedelta(days=1)
             query = query.where(MealLog.date >= target_date, MealLog.date < next_day)
         except ValueError:
             pass  # Invalid date format, ignore filter

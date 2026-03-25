@@ -4,10 +4,10 @@ AI Fitness Coach v1 — Dashboard API Route
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc
-from datetime import datetime
+from datetime import datetime, timezone
 from app.database import get_db
 from app.models.user import UserProfile
-from app.models.plan import WeeklyPlan, WorkoutLog, AdherenceRecord, PlanRevision
+from app.models.plan import WeeklyPlan, WorkoutLog, MealLog, AdherenceRecord, PlanRevision
 from app.schemas.plan import DashboardResponse, PlanRevisionResponse
 
 router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
@@ -33,7 +33,7 @@ async def get_dashboard(user_id: str, db: AsyncSession = Depends(get_db)):
     Get the today-view dashboard — the primary screen of the app.
     Combines: today's workout + meals + progress snapshot + coaching message + plan revisions.
     """
-    today = datetime.now()
+    today = datetime.now(timezone.utc)
     day_names = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
     today_name = day_names[today.weekday()]
     today_str = today.strftime("%Y-%m-%d")
@@ -68,17 +68,21 @@ async def get_dashboard(user_id: str, db: AsyncSession = Depends(get_db)):
         workout_plan = plan.workout_plan or {}
         meal_plan = plan.meal_plan or {}
 
+        # Handle both formats: list of days or dict with "days" key
+        workout_days = workout_plan if isinstance(workout_plan, list) else workout_plan.get("days", [])
+        meal_days = meal_plan if isinstance(meal_plan, list) else meal_plan.get("days", [])
+
         # Find today's workout
-        for day in workout_plan.get("days", []):
+        for day in workout_days:
             if day.get("day", "").lower() == today_name.lower():
                 today_workout = day
                 break
 
         # Find today's meals
-        for day in meal_plan.get("days", []):
+        for day in meal_days:
             if day.get("day", "").lower() == today_name.lower():
                 today_meals = day.get("meals", [])
-                macro_targets = day.get("totals", {})
+                macro_targets = day.get("totals", day.get("daily_totals", {}))
                 break
 
         # Count shopping list items
@@ -89,7 +93,7 @@ async def get_dashboard(user_id: str, db: AsyncSession = Depends(get_db)):
         for i in range(1, 7):
             next_day_idx = (today_idx + i) % 7
             next_day_name = day_names[next_day_idx]
-            for day in workout_plan.get("days", []):
+            for day in workout_days:
                 if day.get("day", "").lower() == next_day_name.lower() and not day.get("is_rest_day"):
                     next_workout = {"day": next_day_name, "focus": day.get("focus", "")}
                     break
@@ -117,7 +121,9 @@ async def get_dashboard(user_id: str, db: AsyncSession = Depends(get_db)):
         log_result = await db.execute(select(WorkoutLog).where(WorkoutLog.user_id == user_id).limit(10))
         recent_logs = log_result.scalars().all()
         if recent_logs:
-            training_days = len([d for d in (plan.workout_plan or {}).get("days", []) if not d.get("is_rest_day")])
+            wp = plan.workout_plan or {}
+            wp_days = wp if isinstance(wp, list) else wp.get("days", [])
+            training_days = len([d for d in wp_days if not d.get("is_rest_day")])
             if training_days > 0:
                 weekly_adherence = min(1.0, len(recent_logs) / training_days) * 100
 
@@ -130,6 +136,24 @@ async def get_dashboard(user_id: str, db: AsyncSession = Depends(get_db)):
     elif today_workout and today_workout.get("is_rest_day"):
         coaching_message = "Today is a rest day. Recovery is just as important as training!"
 
+    # 6. Aggregate today's logged meal macros
+    macro_actuals = None
+    meal_log_result = await db.execute(
+        select(MealLog).where(
+            MealLog.user_id == user_id,
+            MealLog.date >= datetime.strptime(today_str, "%Y-%m-%d").replace(tzinfo=timezone.utc),
+            MealLog.date < datetime.strptime(today_str, "%Y-%m-%d").replace(hour=23, minute=59, second=59, tzinfo=timezone.utc),
+        )
+    )
+    meal_logs = meal_log_result.scalars().all()
+    if meal_logs:
+        macro_actuals = {
+            "calories": sum(m.calories or 0 for m in meal_logs),
+            "protein_g": round(sum(m.protein_g or 0 for m in meal_logs), 1),
+            "carbs_g": round(sum(m.carbs_g or 0 for m in meal_logs), 1),
+            "fat_g": round(sum(m.fat_g or 0 for m in meal_logs), 1),
+        }
+
     return DashboardResponse(
         date=today_str,
         greeting=greeting,
@@ -138,7 +162,7 @@ async def get_dashboard(user_id: str, db: AsyncSession = Depends(get_db)):
         workout_completed=workout_completed,
         meals=today_meals,
         macro_targets=macro_targets,
-        macro_actuals=None,
+        macro_actuals=macro_actuals,
         current_weight_kg=profile.weight_kg if profile else None,
         weight_trend=None,
         weekly_adherence_pct=weekly_adherence,
@@ -149,4 +173,4 @@ async def get_dashboard(user_id: str, db: AsyncSession = Depends(get_db)):
 
 @router.get("/health")
 async def health_check():
-    return {"status": "healthy", "service": "AI Fitness Coach v1", "timestamp": datetime.now().isoformat()}
+    return {"status": "healthy", "service": "AI Fitness Coach v1", "timestamp": datetime.now(timezone.utc).isoformat()}

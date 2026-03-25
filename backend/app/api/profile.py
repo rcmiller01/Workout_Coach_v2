@@ -133,6 +133,19 @@ async def log_weight(data: WeightEntryRequest, db: AsyncSession = Depends(get_db
         profile.weight_kg = data.weight_kg
 
     await db.commit()
+
+    # Sync to wger (fire-and-forget, don't block the response)
+    try:
+        from app.providers.wger import WgerProvider
+        from app.config import settings as app_settings
+        wger = WgerProvider(base_url=app_settings.wger_base_url, api_token=app_settings.wger_api_token)
+        await wger.log_weight(data.weight_kg)
+        entry.synced_to_wger = "synced"
+        await db.commit()
+        await wger.close()
+    except Exception:
+        pass  # Don't fail weight logging if wger sync fails
+
     return {"status": "success", "weight": data.weight_kg, "source": "manual"}
 
 

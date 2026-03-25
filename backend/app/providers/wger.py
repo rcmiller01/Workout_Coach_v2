@@ -224,6 +224,64 @@ class WgerProvider(BaseProvider):
         """List nutrition plans."""
         return await self.get("/nutritionplan/", params={"format": "json"})
 
+    # ─── Workout Log Management ──────────────────────────────
+
+    async def delete_workout_log(self, log_id: int) -> None:
+        """Delete a single workout log entry."""
+        await self._request("DELETE", f"/workoutlog/{log_id}/")
+
+    # ─── Nutrition Plan Management ────────────────────────────
+
+    async def create_nutrition_plan(self, description: str = "AI Coach Plan") -> dict:
+        """Create a nutrition plan (container for diary entries)."""
+        return await self.post("/nutritionplan/", json={
+            "description": description,
+            "only_logging": True,
+        })
+
+    async def add_nutrition_diary_entry(
+        self,
+        plan_id: int,
+        amount: float,
+        ingredient_id: Optional[int] = None,
+        weight_unit_id: Optional[int] = None,
+        date_str: Optional[str] = None,
+    ) -> dict:
+        """Add an entry to the nutrition diary."""
+        data = {
+            "plan": plan_id,
+            "amount": str(amount),
+            "datetime": date_str or datetime.now().isoformat(),
+        }
+        if ingredient_id:
+            data["ingredient"] = ingredient_id
+        if weight_unit_id:
+            data["weight_unit"] = weight_unit_id
+        return await self.post("/nutritiondiary/", json=data)
+
+    async def search_ingredient(self, term: str, language: int = 2) -> dict:
+        """Search for ingredients by name."""
+        return await self.get("/ingredient/", params={
+            "format": "json",
+            "language": language,
+            "name": term,
+        })
+
+    # ─── Workout Sessions ────────────────────────────────────
+
+    async def create_workout_session(
+        self,
+        routine_id: int,
+        date_str: Optional[str] = None,
+        notes: str = "",
+    ) -> dict:
+        """Create a workout session (groups log entries for a single workout)."""
+        return await self.post("/workoutsession/", json={
+            "routine": routine_id,
+            "date": date_str or date.today().isoformat(),
+            "notes": notes,
+        })
+
     # ─── User Info ─────────────────────────────────────────────
 
     async def get_user_info(self) -> dict:

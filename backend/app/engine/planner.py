@@ -28,64 +28,19 @@ Do not include any conversational text outside the JSON.
 If you use markdown blocks, ensure they are correctly closed.
 """
 
-WORKOUT_PLAN_PROMPT = """You are an expert fitness coach creating a personalized weekly workout plan.
+WORKOUT_PLAN_PROMPT = """Generate a workout for {day_name} (Day {day_number}).
 
-## User Profile
-- Goal: {goal}
-- Available equipment: {equipment}
-- Training days per week: {days_per_week}
-- Session length: {session_length_min} minutes
-- Preferred time: {preferred_workout_time}
-- Injuries: {injuries}
+Profile: Goal={goal}, Equipment={equipment}, Session={session_length_min}min, Injuries={injuries}
+Preferences: {workout_notes}
+Week schedule: {week_schedule}
+Already used exercises this week: {previous_days_summary}
 
-## Recent Performance
-{recent_performance}
+{day_assignment}
 
-## Instructions
-Create a {days_per_week}-day workout plan for the week starting {week_start}.
-Consider {equipment} constraints.
-{instructions}
+Rules: ONLY use {equipment}. Aim for {session_length_min} minutes. Use DIFFERENT exercises from those already listed above.
 
-Return JSON format:
-{{
-  "split_type": "string",
-  "notes": "string",
-  "days": [
-    {{
-      "day": "string",
-      "day_number": int,
-      "focus": "string",
-      "is_rest_day": bool,
-      "estimated_duration_min": int,
-      "warmup_notes": "string",
-      "exercises": [
-        {{
-          "name": "string",
-          "muscle_group": "string",
-          "sets": int,
-          "reps": "string",
-          "weight_kg": float,
-          "rest_sec": int,
-          "notes": "string",
-          "substitutions": ["string"]
-        }}
-      ]
-    }}
-  ]
-}}
-
-### SINGLE DAY WORKOUT PROMPT
-To generate just ONE day of a workout:
 Return JSON:
-{{
-  "day": "string",
-  "day_number": int,
-  "focus": "string",
-  "is_rest_day": bool,
-  "estimated_duration_min": int,
-  "warmup_notes": "string",
-  "exercises": [ ... same as above ... ]
-}}
+{{"day":"{day_name}","day_number":{day_number},"focus":"string","is_rest_day":false,"estimated_duration_min":int,"warmup_notes":"string","exercises":[{{"name":"string","muscle_group":"string","sets":int,"reps":"string","weight_kg":float,"rest_sec":int,"notes":"string","substitutions":["string"]}}]}}
 """ + COMMON_INSTRUCTIONS
 
 MEAL_PLAN_PROMPT = """You are an expert nutritionist creating a personalized weekly meal plan.
@@ -158,35 +113,30 @@ class LLMPlanner:
         return self.model
 
     @track_timing("planner", "llm_call")
-    async def _call_llm(self, prompt: str, system_message: str = "") -> str:
-        import litellm
-        
-        # Log input (truncated)
+    async def _call_llm(self, prompt: str, system_message: str = "", num_predict: int = 4096) -> str:
+        """
+        Call the LLM. Uses direct httpx for Ollama (avoids litellm stripping
+        thinking-model content), falls back to litellm for other providers.
+        """
         logger.info("llm_request_start", prompt_len=len(prompt))
-        
+
         try:
-            response = await litellm.acompletion(
-                model=self._get_model_string(),
-                messages=[
-                    {"role": "system", "content": system_message},
-                    {"role": "user", "content": prompt}
-                ],
-                temperature=0.2, # Lower for more consistent JSON
-                max_tokens=2000,
-                api_base=self.base_url if self.provider == "ollama" else None,
-                timeout=300,
-            )
-            
-            content = response.choices[0].message.content
-            
-            # 1. Strip <think> tags
+            if self.provider == "ollama":
+                content = await self._call_ollama_direct(prompt, system_message, num_predict=num_predict)
+            else:
+                content = await self._call_litellm(prompt, system_message)
+
+            # 1. Strip <think> tags (thinking models like qwen3)
             if "<think>" in content:
                 content = content.split("</think>")[-1].strip()
-                
+
             # 2. Safety Check: Response size
             if len(content) > self.max_response_size:
                 logger.error("llm_response_oversize", size=len(content))
                 raise ValueError("LLM response exceeded safety size limit")
+
+            if not content:
+                raise ValueError("LLM returned empty response after processing")
 
             logger.info("llm_request_success", response_len=len(content))
             return content
@@ -195,11 +145,59 @@ class LLMPlanner:
             logger.error("llm_request_failed", error=str(e))
             raise
 
+    async def _call_ollama_direct(self, prompt: str, system_message: str = "", num_predict: int = 4096) -> str:
+        """Direct Ollama API call via httpx — avoids litellm compatibility issues."""
+        import httpx
+
+        async with httpx.AsyncClient(timeout=600.0) as client:
+            response = await client.post(
+                f"{self.base_url}/api/chat",
+                json={
+                    "model": self.model,
+                    "messages": [
+                        {"role": "system", "content": system_message or "You are a helpful assistant."},
+                        {"role": "user", "content": prompt},
+                    ],
+                    "stream": False,
+                    "think": False,
+                    "options": {
+                        "temperature": 0.2,
+                        "num_predict": num_predict,
+                    },
+                },
+            )
+            response.raise_for_status()
+            data = response.json()
+            return data.get("message", {}).get("content", "")
+
+    async def _call_litellm(self, prompt: str, system_message: str = "") -> str:
+        """LiteLLM call for non-Ollama providers (OpenAI, Anthropic, etc.)."""
+        import litellm
+
+        response = await litellm.acompletion(
+            model=self._get_model_string(),
+            messages=[
+                {"role": "system", "content": system_message},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.2,
+            max_tokens=4096,
+            api_base=self.base_url if self.provider == "ollama" else None,
+            timeout=300,
+        )
+        return response.choices[0].message.content or ""
+
     def _parse_json(self, text: str) -> dict:
         """Robust JSON parsing with multiple strategies."""
+        def _unwrap(obj):
+            """If the LLM returned a list with one element, unwrap it to a dict."""
+            if isinstance(obj, list) and len(obj) >= 1:
+                return obj[0]
+            return obj
+
         try:
             # 1. Direct parse
-            return json.loads(text)
+            return _unwrap(json.loads(text))
         except json.JSONDecodeError:
             # 2. Markdown block extraction
             for block in ["```json", "```"]:
@@ -207,19 +205,74 @@ class LLMPlanner:
                     try:
                         start = text.index(block) + len(block)
                         end = text.index("```", start)
-                        return json.loads(text[start:end].strip())
+                        return _unwrap(json.loads(text[start:end].strip()))
                     except: pass
-            
+
             # 3. Last resort: Boundary finding
             try:
                 start = text.find("{")
                 end = text.rfind("}") + 1
                 if start >= 0 and end > start:
-                    return json.loads(text[start:end])
+                    return _unwrap(json.loads(text[start:end]))
             except: pass
-            
+
         logger.error("json_parse_failed", text_preview=text[:200])
         raise ValueError("Could not extract valid JSON from LLM response")
+
+    def _build_week_schedule(self, days_per_week: int, goal: str) -> list[dict]:
+        """
+        Pre-compute which days are training vs rest, and assign focus areas.
+        Returns a list of 7 dicts: [{day, is_rest, focus_hint}, ...]
+        """
+        day_names = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+
+        # Common split patterns by training days
+        SPLITS = {
+            2: {
+                "schedule": [True, False, False, True, False, False, False],
+                "focuses": ["Full Body A", "Full Body B"],
+            },
+            3: {
+                "schedule": [True, False, True, False, True, False, False],
+                "focuses": ["Push + Core", "Pull + Legs", "Full Body Conditioning"],
+            },
+            4: {
+                "schedule": [True, True, False, True, True, False, False],
+                "focuses": ["Upper Body Strength", "Lower Body Strength", None, "Upper Body Hypertrophy", "Lower Body & Conditioning"],
+            },
+            5: {
+                "schedule": [True, True, True, False, True, True, False],
+                "focuses": ["Push", "Pull", "Legs", None, "Upper Body", "Lower Body & Conditioning"],
+            },
+            6: {
+                "schedule": [True, True, True, True, True, True, False],
+                "focuses": ["Push", "Pull", "Legs", "Push Variation", "Pull Variation", "Legs & Conditioning"],
+            },
+            7: {
+                "schedule": [True, True, True, True, True, True, True],
+                "focuses": ["Push", "Pull", "Legs", "Upper Strength", "Lower Strength", "Conditioning", "Active Recovery"],
+            },
+        }
+
+        split = SPLITS.get(days_per_week, SPLITS[4])
+        schedule = split["schedule"]
+        focuses = split["focuses"]
+
+        result = []
+        focus_idx = 0
+        for i, day_name in enumerate(day_names):
+            is_training = schedule[i] if i < len(schedule) else False
+            if is_training and focus_idx < len(focuses):
+                focus = focuses[focus_idx]
+                focus_idx += 1
+                if focus is None:  # Skip None entries (rest days within the focuses list)
+                    result.append({"day": day_name, "is_rest": True, "focus_hint": "Rest & Recovery"})
+                    continue
+                result.append({"day": day_name, "is_rest": False, "focus_hint": focus})
+            else:
+                result.append({"day": day_name, "is_rest": True, "focus_hint": "Rest & Recovery"})
+
+        return result
 
     async def generate_workout_plan(
         self,
@@ -228,38 +281,84 @@ class LLMPlanner:
         fast_mode: bool = False
     ) -> List[NormalizedWorkoutDay]:
         """Generate normalized workout days by calling LLM for each day."""
-        days_count = 3 if fast_mode else 7 # Plan for full week but only days_per_week are active
-        
         day_names = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
-        if fast_mode: day_names = day_names[:3]
+        days_per_week = profile.get("days_per_week", 4)
+        session_length = profile.get("session_length_min", 45)
+        equipment = ", ".join(profile.get("equipment", ["bodyweight"]))
+
+        # 1. Pre-compute the weekly schedule
+        week_schedule = self._build_week_schedule(days_per_week, profile.get("goal", "maintenance"))
+
+        if fast_mode:
+            # In fast mode, only generate first 3 days
+            week_schedule = week_schedule[:3]
+            day_names = day_names[:3]
+
+        # Format the schedule for the prompt
+        def _fmt_sched(s):
+            if s["is_rest"]:
+                return f"- {s['day']}: REST DAY"
+            return f"- {s['day']}: TRAINING — {s['focus_hint']}"
+        schedule_str = "\n".join([_fmt_sched(s) for s in week_schedule])
 
         workout_days = []
-        for i, day_name in enumerate(day_names):
-            logger.info("generating_workout_day", day=day_name, index=i+1)
-            
-            # Determine if this should be a rest day based on profile.days_per_week
-            # Simple heuristic: if we want 4 days, mark Wed/Sat/Sun as rest if i is and etc.
-            # But let's let the LLM decide the focus/rest for each specific day name.
-            
+        for i, sched in enumerate(week_schedule):
+            day_name = sched["day"]
+            is_rest = sched["is_rest"]
+            focus_hint = sched["focus_hint"]
+
+            logger.info("generating_workout_day", day=day_name, index=i+1, is_rest=is_rest)
+
+            # For rest days, skip the LLM call entirely
+            if is_rest:
+                workout_days.append(NormalizedWorkoutDay(
+                    day=day_name,
+                    day_number=i + 1,
+                    focus="Rest & Recovery",
+                    is_rest_day=True,
+                    estimated_duration_min=0,
+                    warmup_notes="Light stretching or walking recommended.",
+                    exercises=[],
+                ))
+                continue
+
+            # Build summary of previously generated training days for variety
+            prev_summary = "None yet — this is the first training day."
+            if workout_days:
+                prev_lines = []
+                for prev in workout_days:
+                    if not prev.is_rest_day and prev.exercises:
+                        ex_names = [e.name for e in prev.exercises]
+                        prev_lines.append(f"  {prev.day} ({prev.focus}): {', '.join(ex_names)}")
+                if prev_lines:
+                    prev_summary = "\n".join(prev_lines)
+
+            # Build the day assignment instruction
+            day_assignment = f"This is a TRAINING DAY. Focus area: **{focus_hint}**. Generate {5}-{7} exercises targeting this focus."
+
             prompt = WORKOUT_PLAN_PROMPT.format(
                 goal=profile.get("goal", "muscle_gain"),
-                equipment=", ".join(profile.get("equipment", ["bodyweight"])),
-                days_per_week=profile.get("days_per_week", 4),
-                session_length_min=profile.get("session_length_min", 45),
-                preferred_workout_time=profile.get("preferred_workout_time", "evening"),
-                injuries=", ".join(profile.get("injuries", [])),
-                recent_performance=recent_performance,
-                week_start=datetime.now().strftime("%Y-%m-%d"),
-                instructions=f"Generate ONLY the plan for {day_name} (Day {i+1} of the week)."
+                equipment=equipment,
+                session_length_min=session_length,
+                injuries=", ".join(profile.get("injuries", [])) or "None",
+                workout_notes=profile.get("workout_notes", "No special preferences."),
+                week_schedule=schedule_str,
+                previous_days_summary=prev_summary,
+                day_name=day_name,
+                day_number=i + 1,
+                day_assignment=day_assignment,
             )
 
-            raw = await self._call_llm(prompt, "You are a world-class CSCS fitness coach. Generate JSON for ONE day.")
+            raw = await self._call_llm(prompt, "You are a world-class CSCS fitness coach. Generate JSON for ONE day. Ensure exercise variety across the week.")
             data = self._parse_json(raw)
-            
-            # If the LLM returned a 'days' list, take the first one. Otherwise assume it returned the day directly.
+
+            # If the LLM returned a list, unwrap it first
+            if isinstance(data, list):
+                data = data[0]
+            # If the LLM returned a 'days' list, take the first one
             day_data = data.get("days", [data])[0]
             workout_days.append(NormalizedWorkoutDay(**day_data))
-            
+
         return workout_days
 
     async def generate_meal_plan(
@@ -290,6 +389,9 @@ class LLMPlanner:
             raw = await self._call_llm(prompt, "You are a clinical sports nutritionist. Generate JSON for ONE day.")
             data = self._parse_json(raw)
             
+            # If the LLM returned a list, unwrap it first
+            if isinstance(data, list):
+                data = data[0]
             # Take the first day from 'days' or assume the root is the day object
             day_data = data.get("days", [data])[0]
             

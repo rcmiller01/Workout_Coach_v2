@@ -12,7 +12,7 @@ Revision state handling:
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc, func, update, and_, or_
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import json
 import logging
 
@@ -123,7 +123,9 @@ async def generate_weekly_plan(request: WeeklyPlanRequest, db: AsyncSession = De
         "equipment": profile_model.equipment or [],
         "days_per_week": profile_model.days_per_week,
         "session_length_min": profile_model.session_length_min,
+        "preferred_workout_time": profile_model.preferred_workout_time,
         "injuries": profile_model.injuries or [],
+        "workout_notes": profile_model.workout_notes or "",
         "target_calories": profile_model.target_calories,
         "target_protein_g": profile_model.target_protein_g,
         "dietary_restrictions": profile_model.dietary_restrictions or [],
@@ -137,26 +139,12 @@ async def generate_weekly_plan(request: WeeklyPlanRequest, db: AsyncSession = De
         logger.error("api_planning_failed", error=str(e))
         raise HTTPException(status_code=500, detail="Failed to generate plan")
 
-    new_plan = WeeklyPlan(
-        user_id=request.user_id,
-        week_start=datetime.strptime(norm_plan.week_start, "%Y-%m-%d"),
-        week_end=datetime.strptime(norm_plan.week_end, "%Y-%m-%d"),
-        status="active",
-        workout_plan=[d.model_dump() for d in norm_plan.workout_plan],
-        meal_plan=[d.model_dump() for d in norm_plan.meal_plan],
-        shopping_list=[],
-        llm_reasoning=json.dumps({"metadata": norm_plan.metadata}),
-        rules_applied=norm_plan.rules_applied
-    )
-    db.add(new_plan)
-
-    # Replace old plan — also block any pending revisions on the old plan
+    # Replace old plans BEFORE adding the new one to avoid self-replacement
     from sqlalchemy import update as sql_update
     old_plans_result = await db.execute(
         select(WeeklyPlan).where(
             WeeklyPlan.user_id == request.user_id,
             WeeklyPlan.status == "active",
-            WeeklyPlan.id != new_plan.id
         )
     )
     old_plans = old_plans_result.scalars().all()
@@ -172,6 +160,19 @@ async def generate_weekly_plan(request: WeeklyPlanRequest, db: AsyncSession = De
                 status_reason="Blocked due to newer plan revision"
             )
         )
+
+    new_plan = WeeklyPlan(
+        user_id=request.user_id,
+        week_start=datetime.strptime(norm_plan.week_start, "%Y-%m-%d").replace(tzinfo=timezone.utc),
+        week_end=datetime.strptime(norm_plan.week_end, "%Y-%m-%d").replace(tzinfo=timezone.utc),
+        status="active",
+        workout_plan=[d.model_dump() for d in norm_plan.workout_plan],
+        meal_plan=[d.model_dump() for d in norm_plan.meal_plan],
+        shopping_list=[],
+        llm_reasoning=json.dumps({"metadata": norm_plan.metadata}),
+        rules_applied=norm_plan.rules_applied
+    )
+    db.add(new_plan)
 
     await db.commit()
     await db.refresh(new_plan)

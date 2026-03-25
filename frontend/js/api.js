@@ -94,6 +94,15 @@ const api = {
     logWorkout(userId, data) {
         return this.request('POST', `/workouts/log?user_id=${userId}`, data);
     },
+    addExerciseToLog(logId, userId, data) {
+        return this.request('POST', `/workouts/log/${logId}/exercise?user_id=${userId}`, data);
+    },
+    deleteExerciseFromLog(logId, userId, exerciseIndex) {
+        return this.request('DELETE', `/workouts/log/${logId}/exercise/${exerciseIndex}?user_id=${userId}`);
+    },
+    deleteWorkoutLog(logId, userId) {
+        return this.request('DELETE', `/workouts/log/${logId}?user_id=${userId}`);
+    },
     getWorkoutHistory(userId) {
         return this.request('GET', `/workouts/history/${userId}`);
     },
@@ -117,6 +126,9 @@ const api = {
             meal_type: mealType,
             notes: notes
         });
+    },
+    deleteMealLog(userId, mealId) {
+        return this.request('DELETE', `/meals/log/${mealId}?user_id=${userId}`);
     },
     getMealHistory(userId, date = null) {
         let path = `/meals/history/${userId}`;

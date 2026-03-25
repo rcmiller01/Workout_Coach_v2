@@ -163,6 +163,10 @@ class MealLog(Base):
     is_planned = Column(Boolean, default=False)  # True if from weekly plan
     notes = Column(Text, nullable=True)
 
+    # --- wger Sync ---
+    synced_to_wger = Column(String(20), default="pending")
+    # pending | synced | failed | skipped
+
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 

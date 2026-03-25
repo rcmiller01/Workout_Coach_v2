@@ -45,6 +45,9 @@ class ProfileCreate(BaseModel):
     body_fat_pct: Optional[float] = Field(None, ge=3, le=60)
     activity_level: str = Field("moderate", description="sedentary | light | moderate | active | very_active")
 
+    # Workout Preferences
+    workout_notes: Optional[str] = Field(None, description="Freeform workout preferences, e.g. 'full kettlebell workout', 'cardio only Tuesdays'")
+
     # Coaching
     coaching_persona: str = Field("supportive", description="direct | supportive | technical | quiet")
 
@@ -70,6 +73,7 @@ class ProfileUpdate(BaseModel):
     sex: Optional[str] = None
     body_fat_pct: Optional[float] = None
     activity_level: Optional[str] = None
+    workout_notes: Optional[str] = None
     coaching_persona: Optional[str] = None
 
 
@@ -96,6 +100,7 @@ class ProfileResponse(BaseModel):
     sex: Optional[str]
     body_fat_pct: Optional[float]
     activity_level: str
+    workout_notes: Optional[str] = None
     coaching_persona: str
     created_at: Optional[datetime]
     updated_at: Optional[datetime]

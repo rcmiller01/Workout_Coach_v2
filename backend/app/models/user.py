@@ -75,6 +75,11 @@ class UserProfile(Base):
     activity_level = Column(String(20), default="moderate")
     # sedentary | light | moderate | active | very_active
 
+    # --- Workout Preferences ---
+    workout_notes = Column(Text, nullable=True)
+    # Freeform text: "full kettlebell workout", "cardio only on Tuesdays",
+    # "no barbell squats", "prefer compound movements"
+
     # --- Coaching Preferences ---
     coaching_persona = Column(String(20), default="supportive")
     # direct | supportive | technical | quiet
@@ -119,6 +124,10 @@ class WeightEntry(Base):
 
     # Timestamp when this entry was synced from external source
     synced_at = Column(DateTime(timezone=True), nullable=True)
+
+    # --- wger Sync ---
+    synced_to_wger = Column(String(20), default="pending")
+    # pending | synced | failed | skipped
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 

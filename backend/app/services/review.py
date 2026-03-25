@@ -3,7 +3,7 @@ AI Fitness Coach v1 — Weekly Review Service
 
 Generates aggregated analytics and insights for weekly progress review.
 """
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc, and_
@@ -60,7 +60,7 @@ class WeeklyReviewService:
             week_offset: 0 = current week, -1 = last week, etc.
         """
         # Calculate week boundaries
-        today = datetime.now()
+        today = datetime.now(timezone.utc)
         week_start = today.replace(hour=0, minute=0, second=0, microsecond=0)
         week_start -= timedelta(days=today.weekday())  # Monday
         week_start += timedelta(weeks=week_offset)
@@ -139,7 +139,7 @@ class WeeklyReviewService:
     ) -> WeightSummary:
         """Calculate weight trend from last 14 days."""
         # Get last 14 days of weight entries
-        cutoff = datetime.now() - timedelta(days=14)
+        cutoff = datetime.now(timezone.utc) - timedelta(days=14)
         result = await db.execute(
             select(WeightEntry)
             .where(
@@ -198,7 +198,8 @@ class WeeklyReviewService:
         # Count planned workouts from the plan
         planned = 0
         if plan and plan.workout_plan:
-            workout_days = plan.workout_plan.get("days", [])
+            wp = plan.workout_plan
+            workout_days = wp if isinstance(wp, list) else wp.get("days", [])
             planned = len([d for d in workout_days if not d.get("is_rest_day", False)])
 
         # Get workout logs for the week
@@ -251,7 +252,7 @@ class WeeklyReviewService:
         records = result.scalars().all()
 
         # Calculate days in the week so far
-        now = datetime.now()
+        now = datetime.now(timezone.utc)
         if now < week_end:
             total_days = (now.date() - week_start.date()).days + 1
         else:
@@ -646,7 +647,7 @@ class WeeklyReviewService:
         user_id: str,
     ) -> RevisionFrequency:
         """Get revision frequency stats for the last 4 weeks."""
-        cutoff = datetime.now() - timedelta(weeks=4)
+        cutoff = datetime.now(timezone.utc) - timedelta(weeks=4)
 
         result = await db.execute(
             select(PlanRevision)

@@ -50,7 +50,7 @@ class Replanner:
         patch = {"workout_plan": {}, "meal_plan": {}}
         last_revision_dates = last_revision_dates or {}
         sensitivity_settings = sensitivity_settings or {}
-        now = datetime.datetime.utcnow()
+        now = datetime.datetime.now(datetime.timezone.utc)
 
         # Extract sensitivity settings with defaults
         weight_threshold = sensitivity_settings.get(

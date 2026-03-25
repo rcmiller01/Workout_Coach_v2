@@ -5,7 +5,7 @@ Handles validation and restoration of audit bundles.
 """
 import json
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Optional
 from uuid import uuid4
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -425,7 +425,7 @@ class ImportService:
         # Ensure backup directory exists
         os.makedirs(BACKUP_DIR, exist_ok=True)
 
-        timestamp = datetime.utcnow().strftime("%Y%m%d-%H%M%S")
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
         backup_id = f"backup-{timestamp}-{user_id}"
         backup_path = os.path.join(BACKUP_DIR, f"{backup_id}.json")
 
@@ -496,7 +496,7 @@ class ImportService:
 
         bundle["metadata"] = {
             "user_id": user_id,
-            "backed_up_at": datetime.utcnow().isoformat(),
+            "backed_up_at": datetime.now(timezone.utc).isoformat(),
             "backup_id": backup_id,
         }
 
@@ -691,7 +691,7 @@ class ImportService:
                 continue
 
             # Generate new ID
-            new_id = f"plan-{user_id}-{datetime.utcnow().strftime('%Y%m%d%H%M%S')}-{str(uuid4())[:8]}"
+            new_id = f"plan-{user_id}-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}-{str(uuid4())[:8]}"
             id_map[old_id] = new_id
 
             if dry_run:

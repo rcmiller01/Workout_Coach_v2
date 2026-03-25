@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc
 from pydantic import BaseModel
 from typing import Optional, Any
-from datetime import datetime
+from datetime import datetime, timezone
 import json
 
 from app.database import get_db
@@ -382,7 +382,7 @@ async def export_audit_bundle(
     # Set metadata
     bundle["metadata"] = {
         "user_id": user_id,
-        "exported_at": datetime.utcnow().isoformat(),
+        "exported_at": datetime.now(timezone.utc).isoformat(),
         "version": "1.0",
         "record_counts": record_counts,
     }

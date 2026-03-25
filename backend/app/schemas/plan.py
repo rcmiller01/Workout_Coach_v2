@@ -27,8 +27,8 @@ class WeeklyPlanResponse(BaseModel):
     week_end: datetime
     status: str
 
-    workout_plan: dict
-    meal_plan: dict
+    workout_plan: dict | list
+    meal_plan: dict | list
     shopping_list: list
 
     llm_reasoning: Optional[str]
