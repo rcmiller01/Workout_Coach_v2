@@ -1,0 +1,44 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.egg-info
+.pytest_cache
+.coverage
+htmlcov
+venv
+.venv
+
+# IDE
+.vscode
+.idea
+*.swp
+
+# Env files (injected via docker-compose)
+.env
+.env.local
+
+# Data
+data/
+*.db
+*.sqlite
+
+# Docs
+*.md
+!README.md
+LICENSE
+
+# Claude
+.claude/
+
+# Scripts (not needed in container)
+scripts/
+
+# OS
+.DS_Store
+Thumbs.db
+nul
