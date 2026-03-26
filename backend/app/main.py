@@ -9,6 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
+from starlette.middleware.base import BaseHTTPMiddleware
 from slowapi.errors import RateLimitExceeded
 from app.config import settings
 from app.database import init_db
@@ -25,6 +26,7 @@ from app.api import (
 from app.api.auth import router as auth_router
 import logging
 import os
+import warnings
 from app.models.user import User, UserProfile, WeightEntry
 from app.models.plan import WeeklyPlan, PlanRevision
 
@@ -34,7 +36,6 @@ logging.basicConfig(
     level=logging.DEBUG if settings.debug else logging.INFO,
     format="%(asctime)s | %(levelname)-7s | %(name)s | %(message)s",
 )
-from app.config import settings
 from app.logging_config import configure_logging, get_logger, CorrelationIdMiddleware
 from app.providers.wger import WgerProvider
 from app.providers.tandoor import TandoorProvider
@@ -50,11 +51,21 @@ async def lifespan(app: FastAPI):
     logger = get_logger("startup")
     logger.info("app_starting", name=settings.app_name, env=settings.app_env)
 
-    # 2. Init Database
+    # 2. Security checks
+    if settings.is_production:
+        if settings.secret_key in ("change-me-to-a-random-secret-key", "coach-dev-secret-key-change-in-production"):
+            logger.critical("INSECURE_SECRET_KEY — set SECRET_KEY to a random value in production!")
+            raise SystemExit("Refusing to start: SECRET_KEY is not set for production")
+        if settings.cors_origins == "*":
+            logger.warning("CORS allows all origins — set CORS_ORIGINS to your domain in production")
+    elif settings.secret_key in ("change-me-to-a-random-secret-key",):
+        logger.warning("Using default SECRET_KEY — acceptable for development only")
+
+    # 3. Init Database
     await init_db()
     logger.info("database_initialized")
 
-    # 3. Startup Health Checks (Hardening)
+    # 4. Startup Health Checks
     await run_startup_checks(logger)
 
     yield
@@ -89,6 +100,9 @@ app = FastAPI(
     description="AI-powered fitness orchestration API",
     version="1.0.0",
     lifespan=lifespan,
+    # Disable docs in production
+    docs_url="/docs" if not settings.is_production else None,
+    redoc_url="/redoc" if not settings.is_production else None,
 )
 
 # ─── Rate Limiter Setup ───────────────────────────────────────
@@ -108,11 +122,28 @@ app.add_middleware(CorrelationIdMiddleware)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=settings.cors_origin_list,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    """Add security headers to all responses."""
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        if settings.is_production:
+            response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+        # Dev: disable caching for static files
+        if settings.debug and not request.url.path.startswith("/api/"):
+            response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        return response
+
+app.add_middleware(SecurityHeadersMiddleware)
 
 # ─── Routes ───────────────────────────────────────────────────
 
@@ -125,21 +156,6 @@ app.include_router(workouts_router, prefix="/api", tags=["Workouts"])
 app.include_router(meals_router, prefix="/api", tags=["Meals"])
 app.include_router(admin_router)  # Has its own /api/admin prefix
 app.include_router(review_router)  # Has its own /api/review prefix
-
-# Disable caching for static files in development
-if settings.debug:
-    from starlette.middleware.base import BaseHTTPMiddleware
-    from starlette.requests import Request
-    from starlette.responses import Response
-
-    class NoCacheMiddleware(BaseHTTPMiddleware):
-        async def dispatch(self, request: Request, call_next):
-            response = await call_next(request)
-            if not request.url.path.startswith("/api/"):
-                response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
-            return response
-
-    app.add_middleware(NoCacheMiddleware)
 
 # Static Files (Frontend PWA)
 _frontend_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "frontend")

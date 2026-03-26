@@ -98,11 +98,26 @@ class Replanner:
                 reason += f" | Reducing calories by {self.CAL_MODIFIER} due to weight gain ({weight_delta_kg}kg)"
             elif goal == "muscle_gain" and weight_delta_kg < 0:
                 cal_delta = self.CAL_MODIFIER
-                reason += f" | Increasing calories by {self.CAL_MODIFIER} due to stagant weight"
-            
+                reason += f" | Increasing calories by {self.CAL_MODIFIER} due to stagnant weight"
+
             if cal_delta != 0:
                 trigger = "weight_change"
                 patch["meal_plan"]["calorie_adjust"] = cal_delta
+
+        # 4. Steps-based activity adjustment (additive, stacks with weight delta)
+        # Steps affect calorie interpretation only — NOT workout volume
+        steps_cal_adjust = adherence_summary.get("steps_calorie_adjust", 0)
+        if steps_cal_adjust != 0 and not _in_cooldown("nutrition"):
+            existing_cal = patch["meal_plan"].get("calorie_adjust", 0)
+            combined = existing_cal + steps_cal_adjust
+            # Cap combined adjustment at ±CAL_MODIFIER
+            combined = max(-self.CAL_MODIFIER, min(self.CAL_MODIFIER, combined))
+            if combined != 0:
+                patch["meal_plan"]["calorie_adjust"] = combined
+                avg_steps = adherence_summary.get("avg_daily_steps", 0)
+                reason += f" | Activity adjustment {steps_cal_adjust:+d} kcal based on {avg_steps} avg daily steps"
+                if trigger == "manual":
+                    trigger = "activity_level"
 
         return trigger, reason, patch
 

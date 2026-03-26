@@ -211,6 +211,29 @@ async def adaptive_replan(request: Request, current_user: User = Depends(get_cur
 
     adherence_summary = {"missed_workouts": 0, "meal_adherence_pct": 100}
 
+    # 2b. Steps-based calorie adjustment
+    from app.models.user import DailySteps
+    steps_cutoff = datetime.now(timezone.utc) - timedelta(days=7)
+    steps_res = await db.execute(
+        select(DailySteps.steps).where(
+            DailySteps.user_id == user_id,
+            DailySteps.date >= steps_cutoff,
+        )
+    )
+    step_values = [r[0] for r in steps_res.all()]
+    if step_values:
+        avg_steps = sum(step_values) // len(step_values)
+        # Activity tiers: <5K=-100, 5-8K=0, 8-12K=+100, >12K=+200
+        if avg_steps < 5000:
+            adherence_summary["steps_calorie_adjust"] = -100
+        elif avg_steps < 8000:
+            adherence_summary["steps_calorie_adjust"] = 0
+        elif avg_steps < 12000:
+            adherence_summary["steps_calorie_adjust"] = 100
+        else:
+            adherence_summary["steps_calorie_adjust"] = 200
+        adherence_summary["avg_daily_steps"] = avg_steps
+
     # 3. Call Service
     service = _get_planning_service()
     

@@ -1,7 +1,7 @@
 """
 AI Fitness Coach — FastAPI Auth Dependencies
 
-Provides get_current_user and get_optional_user for endpoint protection.
+Provides get_current_user for mandatory JWT endpoint protection.
 """
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -43,18 +43,12 @@ async def get_current_user(
     if not user or not user.is_active:
         raise HTTPException(status_code=401, detail="User not found or inactive")
 
+    # Block legacy users without passwords from accessing protected endpoints.
+    # They must call POST /api/auth/set-password first.
+    if not user.password_hash:
+        raise HTTPException(
+            status_code=403,
+            detail="Account migration required. Please set a password via /api/auth/set-password",
+        )
+
     return user
-
-
-async def get_optional_user(
-    credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
-    db: AsyncSession = Depends(get_db),
-) -> User | None:
-    """Same as get_current_user but returns None instead of 401.
-    Used during the transition period for backward compatibility."""
-    if not credentials:
-        return None
-    try:
-        return await get_current_user(credentials, db)
-    except HTTPException:
-        return None

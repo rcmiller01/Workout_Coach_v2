@@ -23,7 +23,7 @@ class Settings(BaseSettings):
 
     # --- Application ---
     app_name: str = "AI Fitness Coach"
-    app_env: str = "development"
+    app_env: str = "development"  # development | production
     debug: bool = True
     secret_key: str = "change-me-to-a-random-secret-key"
 
@@ -31,6 +31,10 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = 30
     refresh_token_expire_days: int = 7
     jwt_algorithm: str = "HS256"
+
+    # --- CORS ---
+    # Comma-separated list of allowed origins. "*" for dev, specific domains for prod.
+    cors_origins: str = "*"
 
     # --- Database ---
     database_url: str = "sqlite+aiosqlite:///./data/coach.db"
@@ -50,6 +54,17 @@ class Settings(BaseSettings):
     openai_api_key: Optional[str] = None
     anthropic_api_key: Optional[str] = None
 
+    @property
+    def cors_origin_list(self) -> list[str]:
+        """Parse CORS_ORIGINS into a list."""
+        if self.cors_origins == "*":
+            return ["*"]
+        return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
+
+    @property
+    def is_production(self) -> bool:
+        return self.app_env == "production"
+
     class Config:
         env_file = _find_env_file()
         env_file_encoding = "utf-8"
@@ -57,4 +72,3 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
-
