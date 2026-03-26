@@ -1,12 +1,15 @@
 """
 AI Fitness Coach v1 — Profile API Routes
 """
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc, func
 from app.database import get_db
 from app.api.deps import get_current_user
+from app.logging_config import get_logger
 from datetime import datetime, timedelta, timezone
+
+logger = get_logger("profile_api")
 from app.models.user import User, UserProfile, WeightEntry, DailySteps
 from app.schemas.profile import ProfileCreate, ProfileUpdate, ProfileResponse
 from app.schemas.plan import (
@@ -150,8 +153,8 @@ async def log_weight(data: WeightEntryRequest, current_user: User = Depends(get_
         entry.synced_to_wger = "synced"
         await db.commit()
         await wger.close()
-    except Exception:
-        pass  # Don't fail weight logging if wger sync fails
+    except Exception as e:
+        logger.warning("wger_weight_sync_failed", error=str(e))
 
     return {"status": "success", "weight": data.weight_kg, "source": "manual"}
 
@@ -336,7 +339,7 @@ async def log_steps(data: StepsLogRequest, current_user: User = Depends(get_curr
 
 
 @router.get("/steps/summary")
-async def get_steps_summary(days: int = 7, current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+async def get_steps_summary(days: int = Query(7, ge=1, le=90), current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """Get step count summary with calorie adjustment recommendation."""
     user_id = current_user.id
     cutoff = datetime.now(timezone.utc) - timedelta(days=days)

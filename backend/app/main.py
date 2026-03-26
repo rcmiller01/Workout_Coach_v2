@@ -6,6 +6,7 @@ external systems (wger, Tandoor, LLM).
 """
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
@@ -24,18 +25,9 @@ from app.api import (
     review_router,
 )
 from app.api.auth import router as auth_router
-import logging
 import os
-import warnings
 from app.models.user import User, UserProfile, WeightEntry
 from app.models.plan import WeeklyPlan, PlanRevision
-
-
-# Configure logging
-logging.basicConfig(
-    level=logging.DEBUG if settings.debug else logging.INFO,
-    format="%(asctime)s | %(levelname)-7s | %(name)s | %(message)s",
-)
 from app.logging_config import configure_logging, get_logger, CorrelationIdMiddleware
 from app.providers.wger import WgerProvider
 from app.providers.tandoor import TandoorProvider
@@ -119,6 +111,7 @@ async def _rate_limit_handler(request: Request, exc: RateLimitExceeded):
 # ─── Middleware ────────────────────────────────────────────────
 
 app.add_middleware(CorrelationIdMiddleware)
+app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 app.add_middleware(
     CORSMiddleware,

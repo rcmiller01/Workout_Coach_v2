@@ -348,7 +348,7 @@ async def delete_workout_log(
 
 @router.get("/history")
 async def get_workout_history(
-    limit: int = 20,
+    limit: int = Query(20, ge=1, le=100),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):

@@ -160,9 +160,11 @@ async def import_recipe(request: RecipeImportRequest, current_user: User = Depen
             "message": f"Recipe imported from {request.url}",
         }
     except Exception as e:
+        import logging
+        logging.getLogger("coach.meals").error(f"recipe_import_failed: {e}")
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to import recipe: {str(e)}",
+            detail="Failed to import recipe. Check the URL and try again.",
         )
     finally:
         await tandoor.close()
@@ -223,9 +225,11 @@ Be realistic and use common portion sizes. If the description is vague, estimate
         }
 
     except Exception as e:
+        import logging
+        logging.getLogger("coach.meals").error(f"macro_estimate_failed: {e}")
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to estimate macros: {str(e)}",
+            detail="Failed to estimate macros. Try a more specific meal description.",
         )
 
 
@@ -267,8 +271,9 @@ async def log_meal(data: MealLogCreate, current_user: User = Depends(get_current
     # Sync to wger nutrition diary (fire-and-forget)
     try:
         await _sync_meal_to_wger(log, db)
-    except Exception:
-        pass  # Don't fail meal logging if wger sync fails
+    except Exception as e:
+        import logging
+        logging.getLogger("coach.meals").warning(f"wger_meal_sync_failed: {e}")
 
     return log
 
@@ -324,7 +329,7 @@ async def delete_meal_log(meal_id: str, current_user: User = Depends(get_current
 
 @router.get("/history")
 async def get_meal_history(
-    limit: int = 50,
+    limit: int = Query(50, ge=1, le=200),
     date: str = None,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),

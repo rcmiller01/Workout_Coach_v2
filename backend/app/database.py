@@ -4,18 +4,31 @@ AI Fitness Coach v1 — Database Setup
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import DeclarativeBase
 from app.config import settings
+import logging
 import os
 
+logger = logging.getLogger("coach.database")
 
 # Ensure data directory exists (only for SQLite)
 if "sqlite" in settings.database_url:
     os.makedirs("data", exist_ok=True)
 
-engine = create_async_engine(
-    settings.database_url,
-    echo=settings.debug,
-    future=True,
-)
+# Connection pool config varies by backend
+_engine_kwargs = {
+    "echo": settings.debug,
+    "future": True,
+}
+
+if "postgresql" in settings.database_url:
+    _engine_kwargs.update({
+        "pool_size": 10,
+        "max_overflow": 20,
+        "pool_timeout": 30,
+        "pool_recycle": 1800,  # Recycle connections every 30 min
+        "pool_pre_ping": True,  # Verify connections before use
+    })
+
+engine = create_async_engine(settings.database_url, **_engine_kwargs)
 
 async_session = async_sessionmaker(
     engine,
@@ -46,8 +59,9 @@ async def init_db():
             try:
                 from sqlalchemy import text
                 await conn.execute(text(stmt))
-            except Exception:
-                pass  # Column already exists or DB doesn't support IF NOT EXISTS
+            except Exception as e:
+                # Expected on first run or if DB doesn't support IF NOT EXISTS
+                logger.debug("alter_table_skipped", extra={"statement": stmt, "reason": str(e)})
 
 
 async def get_db() -> AsyncSession:

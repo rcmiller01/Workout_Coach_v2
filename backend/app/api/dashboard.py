@@ -4,7 +4,7 @@ AI Fitness Coach v1 — Dashboard API Route
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from app.database import get_db
 from app.api.deps import get_current_user
 from app.models.user import User, UserProfile
@@ -140,11 +140,13 @@ async def get_dashboard(current_user: User = Depends(get_current_user), db: Asyn
 
     # 6. Aggregate today's logged meal macros
     macro_actuals = None
+    day_start = datetime.strptime(today_str, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+    day_end = day_start + timedelta(days=1)
     meal_log_result = await db.execute(
         select(MealLog).where(
             MealLog.user_id == user_id,
-            MealLog.date >= datetime.strptime(today_str, "%Y-%m-%d").replace(tzinfo=timezone.utc),
-            MealLog.date < datetime.strptime(today_str, "%Y-%m-%d").replace(hour=23, minute=59, second=59, tzinfo=timezone.utc),
+            MealLog.date >= day_start,
+            MealLog.date < day_end,
         )
     )
     meal_logs = meal_log_result.scalars().all()
@@ -170,7 +172,7 @@ async def get_dashboard(current_user: User = Depends(get_current_user), db: Asyn
         weekly_adherence_pct=weekly_adherence,
         next_workout=next_workout,
         shopping_list_count=shopping_list_count,
-        revisions=[PlanRevisionResponse.from_orm(r) for r in revisions]
+        revisions=[PlanRevisionResponse.model_validate(r) for r in revisions]
     )
 
 @router.get("/health")

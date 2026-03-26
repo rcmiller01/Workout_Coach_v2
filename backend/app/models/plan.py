@@ -20,7 +20,7 @@ class WeeklyPlan(Base):
     __tablename__ = "weekly_plans"
 
     id = Column(String, primary_key=True, default=generate_uuid)
-    user_id = Column(String, nullable=False, index=True)
+    user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
 
     # --- Plan Metadata ---
     week_start = Column(DateTime(timezone=True), nullable=False)
@@ -82,8 +82,8 @@ class WorkoutLog(Base):
     __tablename__ = "workout_logs"
 
     id = Column(String, primary_key=True, default=generate_uuid)
-    user_id = Column(String, nullable=False, index=True)
-    plan_id = Column(String, nullable=True)
+    user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    plan_id = Column(String, ForeignKey("weekly_plans.id", ondelete="SET NULL"), nullable=True)
     date = Column(DateTime(timezone=True), nullable=False)
 
     # --- Completion Data ---
@@ -113,7 +113,7 @@ class AdherenceRecord(Base):
     __tablename__ = "adherence_records"
 
     id = Column(String, primary_key=True, default=generate_uuid)
-    user_id = Column(String, nullable=False, index=True)
+    user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     date = Column(DateTime(timezone=True), nullable=False)
 
     # --- Workout Adherence ---
@@ -143,8 +143,8 @@ class MealLog(Base):
     __tablename__ = "meal_logs"
 
     id = Column(String, primary_key=True, default=generate_uuid)
-    user_id = Column(String, nullable=False, index=True)
-    plan_id = Column(String, nullable=True)  # Null if custom/unplanned meal
+    user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    plan_id = Column(String, ForeignKey("weekly_plans.id", ondelete="SET NULL"), nullable=True)
     date = Column(DateTime(timezone=True), nullable=False)
 
     # --- Meal Data ---
@@ -186,8 +186,8 @@ class PlanRevision(Base):
     __tablename__ = "plan_revisions"
 
     id = Column(String, primary_key=True, default=generate_uuid)
-    plan_id = Column(String, ForeignKey("weekly_plans.id"), nullable=False, index=True)
-    user_id = Column(String, nullable=False, index=True)
+    plan_id = Column(String, ForeignKey("weekly_plans.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
 
     revision_number = Column(Integer, default=1)
 

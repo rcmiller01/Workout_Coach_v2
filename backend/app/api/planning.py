@@ -321,7 +321,9 @@ async def adaptive_replan(request: Request, current_user: User = Depends(get_cur
 
 @router.post("/replan/approve/{revision_id}", response_model=PlanRevisionResponse)
 async def approve_replan(revision_id: str, current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
-    res = await db.execute(select(PlanRevision).where(PlanRevision.id == revision_id))
+    res = await db.execute(select(PlanRevision).where(
+        PlanRevision.id == revision_id, PlanRevision.user_id == current_user.id
+    ))
     revision = res.scalar_one_or_none()
     if not revision: raise HTTPException(status_code=404, detail="Revision not found")
 
@@ -361,7 +363,9 @@ async def revert_replan(revision_id: str, current_user: User = Depends(get_curre
     Reverse an auto-applied revision by creating a compensating patch.
     Marks the original as 'reverted' (not deleted) to preserve audit trail.
     """
-    res = await db.execute(select(PlanRevision).where(PlanRevision.id == revision_id))
+    res = await db.execute(select(PlanRevision).where(
+        PlanRevision.id == revision_id, PlanRevision.user_id == current_user.id
+    ))
     revision = res.scalar_one_or_none()
 
     if not revision: raise HTTPException(status_code=404, detail="Revision not found")
@@ -424,10 +428,14 @@ async def revert_replan(revision_id: str, current_user: User = Depends(get_curre
 
 @router.get("/revisions/{plan_id}", response_model=list[PlanRevisionResponse])
 async def get_plan_revisions(plan_id: str, current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
-    """
-    Get all revisions for a plan, ordered newest first.
-    Includes status labels for UI display.
-    """
+    """Get all revisions for a plan, ordered newest first."""
+    # Verify plan ownership first
+    plan_res = await db.execute(select(WeeklyPlan).where(
+        WeeklyPlan.id == plan_id, WeeklyPlan.user_id == current_user.id
+    ))
+    if not plan_res.scalar_one_or_none():
+        raise HTTPException(status_code=404, detail="Plan not found")
+
     result = await db.execute(
         select(PlanRevision)
         .where(PlanRevision.plan_id == plan_id)

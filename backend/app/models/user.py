@@ -1,7 +1,7 @@
 """
 AI Fitness Coach v1 — User & Profile Models
 """
-from sqlalchemy import Column, String, Integer, Float, JSON, DateTime, Boolean, Text
+from sqlalchemy import Column, String, Integer, Float, JSON, DateTime, Boolean, Text, ForeignKey
 from sqlalchemy.sql import func
 from app.database import Base
 import uuid
@@ -36,7 +36,7 @@ class UserProfile(Base):
     __tablename__ = "user_profiles"
 
     id = Column(String, primary_key=True, default=generate_uuid)
-    user_id = Column(String, nullable=False, unique=True, index=True)
+    user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, unique=True, index=True)
 
     # --- Goals ---
     goal = Column(String(50), nullable=False, default="maintenance")
@@ -111,7 +111,7 @@ class WeightEntry(Base):
     __tablename__ = "weight_entries"
 
     id = Column(String, primary_key=True, default=generate_uuid)
-    user_id = Column(String, nullable=False, index=True)
+    user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     weight_kg = Column(Float, nullable=False)
     date = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
     notes = Column(Text, nullable=True)
@@ -147,7 +147,7 @@ class DailySteps(Base):
     __tablename__ = "daily_steps"
 
     id = Column(String, primary_key=True, default=generate_uuid)
-    user_id = Column(String, nullable=False, index=True)
+    user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     date = Column(DateTime(timezone=True), nullable=False)
     steps = Column(Integer, nullable=False)
     source = Column(String(20), default="manual")
