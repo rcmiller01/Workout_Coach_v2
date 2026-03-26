@@ -1,4 +1,4 @@
-# 🏋️ AI Fitness Coach v1
+# AI Fitness Coach v1
 
 **Self-hosted AI fitness and nutrition coach** built as an orchestration layer over proven systems.
 
@@ -7,93 +7,153 @@
 ## Architecture
 
 ```
-Mobile App / PWA
-        ↓
-Orchestration API (FastAPI)
-        ↓
- ┌───────────────┬───────────────┐
- │               │               │
-wger API     Tandoor API     LLM (Ollama)
-(workouts)   (recipes)       (planning)
+PWA Frontend (vanilla JS)
+        |
+Orchestration API (FastAPI + JWT auth)
+        |
+ +------+-------+-------+
+ |      |       |       |
+wger  Tandoor  Ollama  PostgreSQL
 ```
 
-## Quick Start
+## Deployment (Proxmox LXC)
 
-### 1. Clone & Configure
+The recommended deployment is a Docker container inside a Proxmox LXC.
+
+### 1. Create the LXC and install
+
+From your **Proxmox host** shell:
 
 ```bash
-cp .env.example .env
-# Edit .env with your settings
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/rcmiller01/Workout_Coach_v2/main/scripts/install.sh)"
 ```
 
-### 2. Start with Docker Compose
+Or with custom options:
 
 ```bash
-docker-compose up -d
+bash scripts/install.sh --id 200 --hostname coach --ip 192.168.50.100 --memory 2048 --cores 2
 ```
 
-This starts:
-- **Coach API** → `http://localhost:8000` (+ Swagger docs at `/docs`)
-- **wger** → `http://localhost:8001`
-- **Tandoor Recipes** → `http://localhost:8002`
+This creates a Debian 12 LXC with Docker, clones the repo to `/opt/ai-fitness-coach`, generates a secure `SECRET_KEY`, and sets the app to production mode.
 
-### 3. Local Development (without Docker)
+### 2. Configure environment variables
+
+The `.env` file is created at `/opt/ai-fitness-coach/.env` from the example template. Edit it with your network settings:
+
+```bash
+# Enter the container (replace 200 with your CT ID)
+pct enter 200
+
+# Edit the environment file
+nano /opt/ai-fitness-coach/.env
+```
+
+Required settings to update:
+
+```env
+# Database — your PostgreSQL instance
+DATABASE_URL=postgresql+asyncpg://postgres:yourpassword@192.168.50.137:5432/fitness_coach
+
+# wger — workout/exercise database
+WGER_BASE_URL=http://192.168.50.98:3000/api/v2
+WGER_API_TOKEN=your-wger-token
+
+# Tandoor — recipe database
+TANDOOR_BASE_URL=http://192.168.50.226:8002/api
+TANDOOR_API_TOKEN=your-tandoor-token
+
+# Ollama — LLM for plan generation
+LLM_PROVIDER=ollama
+LLM_MODEL=qwen3:14b
+LLM_BASE_URL=http://192.168.50.219:11434
+
+# CORS — your app's URL (or * for local network)
+CORS_ORIGINS=*
+```
+
+Save and exit (`Ctrl+O`, `Enter`, `Ctrl+X` in nano).
+
+### 3. Start the app
+
+```bash
+cd /opt/ai-fitness-coach
+docker compose up -d
+```
+
+The app will be available at `http://<container-ip>:8000`.
+
+### 4. Verify
+
+```bash
+curl http://localhost:8000/api/dashboard/health
+# {"status":"healthy","service":"AI Fitness Coach v1",...}
+```
+
+### Updating
+
+```bash
+bash /opt/ai-fitness-coach/scripts/update.sh
+```
+
+This pulls the latest code, rebuilds the Docker image, and restarts the app.
+
+## Local Development
 
 ```bash
 cd backend
 python -m venv venv
-venv\Scripts\activate  # Windows
+venv\Scripts\activate  # Windows (or source venv/bin/activate on Linux/Mac)
 pip install -r requirements.txt
+
+# Copy and edit environment config
+cp ../.env.example ../.env
 
 # Start the API
 uvicorn app.main:app --reload --port 8000
 ```
 
-### 4. Setup External Systems
+## External Services Setup
 
-1. **wger**: Visit `http://localhost:8001`, create account, generate API token in settings
-2. **Tandoor**: Visit `http://localhost:8002`, create account, generate API token
-3. **Update `.env`** with your tokens
-
-### 5. (Optional) Start Ollama for LLM
-
-```bash
-ollama serve
-ollama pull llama3
-```
+| Service | Purpose | Setup |
+|---------|---------|-------|
+| **PostgreSQL** | Database | Create a database, set `DATABASE_URL` in `.env` |
+| **wger** | Workout/exercise DB | Generate API token in wger settings |
+| **Tandoor** | Recipe DB | Generate API token in Tandoor settings (uses Bearer auth) |
+| **Ollama** | LLM plan generation | `ollama pull qwen3:14b` on your GPU machine |
 
 ## API Endpoints
 
+All endpoints require JWT authentication (except `/api/auth/*` and `/api/dashboard/health`).
+
+### Auth
 | Method | Path | Description |
 |--------|------|-------------|
-| `GET` | `/api/health` | Health check |
-| `POST` | `/api/profile/` | Create user profile |
-| `GET` | `/api/profile/{user_id}` | Get profile |
-| `PUT` | `/api/profile/{user_id}` | Update profile |
-| `GET` | `/api/dashboard/{user_id}` | Today's dashboard |
-| `POST` | `/api/planning/weekly` | Generate weekly plan |
-| `GET` | `/api/planning/current/{user_id}` | Current active plan |
-| `GET` | `/api/workouts/today/{user_id}` | Today's workout |
-| `POST` | `/api/workouts/log` | Log workout |
-| `GET` | `/api/meals/today/{user_id}` | Today's meals |
-| `POST` | `/api/meals/import-recipe` | Import recipe from URL |
+| `POST` | `/api/auth/register` | Create account |
+| `POST` | `/api/auth/login` | Login (returns JWT) |
+| `POST` | `/api/auth/refresh` | Refresh access token |
+| `GET` | `/api/auth/me` | Current user info |
 
-## Core Components
-
-- **Orchestration API** — FastAPI backend that coordinates everything
-- **Provider Adapters** — wger (workouts) + Tandoor (recipes) integrations
-- **LLM Planner** — Generates personalized workout & meal plans
-- **Rules Engine** — Validates plans against safety constraints
-- **Sync Engine** — Keeps external systems in sync
-- **Substitution Engine** — Exercise & recipe alternatives
+### Core
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/dashboard/dashboard` | Today's dashboard |
+| `POST` | `/api/planning/weekly` | Generate weekly plan (rate limited: 3/hr) |
+| `GET` | `/api/planning/current` | Current active plan |
+| `POST` | `/api/planning/replan` | Trigger adaptive replan (rate limited: 10/hr) |
+| `GET` | `/api/workouts/today` | Today's workout |
+| `POST` | `/api/workouts/log` | Log completed workout |
+| `GET` | `/api/meals/today` | Today's meals |
+| `POST` | `/api/meals/log` | Log a meal |
+| `POST` | `/api/profile/steps` | Log daily step count |
 
 ## Tech Stack
 
-- **Backend**: Python 3.11, FastAPI, SQLAlchemy 2.0, SQLite
-- **LLM**: Ollama (local) or OpenAI/Anthropic via litellm
-- **HTTP Client**: httpx (async)
-- **Frontend**: PWA (Progressive Web App)
-- **Infrastructure**: Docker Compose
+- **Backend**: Python 3.11, FastAPI, SQLAlchemy 2.0, PostgreSQL
+- **Auth**: JWT (python-jose + passlib/bcrypt)
+- **LLM**: LiteLLM (Ollama, OpenAI, Anthropic)
+- **Rate Limiting**: slowapi
+- **Frontend**: Vanilla JS PWA with glassmorphism dark theme
+- **Deploy**: Docker + Proxmox LXC helper script
 
 ## License
 
