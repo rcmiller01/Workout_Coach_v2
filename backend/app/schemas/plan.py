@@ -10,7 +10,7 @@ from app.schemas.meal import MealPlan, ShoppingList
 
 class WeeklyPlanRequest(BaseModel):
     """Request to generate a new weekly plan."""
-    user_id: str
+    user_id: Optional[str] = None  # Set from JWT in endpoint
     week_start: Optional[datetime] = None  # Defaults to next Monday
     force_regenerate: bool = False
     fast_mode: bool = False  # Generate shorter plan for speed
@@ -105,7 +105,7 @@ class DashboardResponse(BaseModel):
 
 class PlanAdjustmentRequest(BaseModel):
     """Request to adjust the current plan (adaptive replanning)."""
-    user_id: str
+    user_id: Optional[str] = None
     reason: str  # "missed_workout" | "weight_change" | "adherence_drop" | "user_request"
     details: Optional[str] = None
     specific_day: Optional[str] = None  # If adjusting a specific day
@@ -113,14 +113,14 @@ class PlanAdjustmentRequest(BaseModel):
 
 class WeightEntryRequest(BaseModel):
     """Log a manual weight entry."""
-    user_id: str
+    user_id: Optional[str] = None
     weight_kg: float
     notes: Optional[str] = None
 
 
 class WeightSyncRequest(BaseModel):
     """Sync a weight entry from an external source (HealthKit, Google Fit, etc.)."""
-    user_id: str
+    user_id: Optional[str] = None
     weight_kg: float
     source: str = Field(..., pattern="^(healthkit|google_fit|import)$")
     source_id: Optional[str] = None  # External ID for deduplication

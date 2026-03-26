@@ -14,7 +14,7 @@ class InjuryDetail(BaseModel):
 
 class ProfileCreate(BaseModel):
     """Schema for creating a new user profile."""
-    user_id: str
+    user_id: Optional[str] = None  # Set from JWT in endpoint
 
     # Goals
     goal: str = Field("maintenance", description="fat_loss | muscle_gain | maintenance | general_fitness")

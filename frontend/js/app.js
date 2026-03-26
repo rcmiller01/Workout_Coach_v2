@@ -393,6 +393,9 @@ const App = {
             this._setGenerateButtons('error');
         } finally {
             this._busy.generatePlan = false;
+            // Always reset buttons — the dashboard re-render may set them
+            // differently, but we need to clear stuck state regardless
+            this._setGenerateButtons('ready');
         }
     },
 
@@ -533,8 +536,6 @@ const App = {
     // ── Meal Deletion ──
 
     async deleteMealLog(mealId) {
-        if (!confirm('Remove this logged meal?')) return;
-
         // Find the delete button for this meal
         const deleteBtn = document.querySelector(`button[onclick*="deleteMealLog('${mealId}')"]`);
 
