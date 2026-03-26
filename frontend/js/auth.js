@@ -30,8 +30,7 @@ const Auth = {
     },
 
     isLegacyUser() {
-        // Has UUID from old system but no JWT tokens
-        return !this.getAccessToken() && !!localStorage.getItem('coach_user_id');
+        return false; // Legacy UUID mode removed — JWT required
     },
 
     // ── API Calls ──

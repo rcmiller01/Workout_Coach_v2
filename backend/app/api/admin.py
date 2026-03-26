@@ -4,7 +4,8 @@ AI Fitness Coach v1 — Admin API Routes
 Administrative endpoints for development, testing, and operations.
 These endpoints should be protected in production.
 """
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from app.rate_limit import limiter
 from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc
@@ -53,7 +54,9 @@ class DemoUserSummary(BaseModel):
 
 
 @router.post("/seed/demo", response_model=SeedResponse, status_code=201)
+@limiter.limit("5/minute")
 async def seed_demo_data(
+    request: Request,
     clear_existing: bool = Query(
         False,
         description="If true, delete existing demo data before seeding"
@@ -513,8 +516,10 @@ async def preview_import(
 
 
 @router.post("/import/restore", response_model=ImportRestoreResponse)
+@limiter.limit("5/minute")
 async def restore_from_bundle(
-    request: ImportRestoreRequest,
+    request: Request,
+    restore_data: ImportRestoreRequest = None,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -537,8 +542,8 @@ async def restore_from_bundle(
     """
     return await import_service.execute_restore(
         db=db,
-        bundle=request.bundle,
-        mode=request.mode,
-        dry_run=request.dry_run,
-        target_user_id=request.target_user_id,
+        bundle=restore_data.bundle,
+        mode=restore_data.mode,
+        dry_run=restore_data.dry_run,
+        target_user_id=restore_data.target_user_id,
     )

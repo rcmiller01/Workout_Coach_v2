@@ -3,7 +3,8 @@ AI Fitness Coach — Auth API Routes
 
 Handles user registration, login, token refresh, and legacy account migration.
 """
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from app.rate_limit import limiter
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
@@ -41,7 +42,8 @@ def _make_token_response(user: User) -> TokenResponse:
 
 
 @router.post("/register", response_model=TokenResponse, status_code=201)
-async def register(data: UserRegister, db: AsyncSession = Depends(get_db)):
+@limiter.limit("5/minute")
+async def register(request: Request, data: UserRegister, db: AsyncSession = Depends(get_db)):
     """Register a new user account. Returns access + refresh tokens."""
     # Check username uniqueness
     result = await db.execute(select(User).where(User.username == data.username))
@@ -68,7 +70,8 @@ async def register(data: UserRegister, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/login", response_model=TokenResponse)
-async def login(data: UserLogin, db: AsyncSession = Depends(get_db)):
+@limiter.limit("5/minute")
+async def login(request: Request, data: UserLogin, db: AsyncSession = Depends(get_db)):
     """Authenticate with username + password. Returns access + refresh tokens."""
     result = await db.execute(select(User).where(User.username == data.username))
     user = result.scalar_one_or_none()

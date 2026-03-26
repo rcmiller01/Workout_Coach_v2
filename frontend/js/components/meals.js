@@ -21,7 +21,7 @@ const MealsComponent = {
         const today = new Date().toISOString().split('T')[0];
         let loggedMeals = [];
         try {
-            const history = await api.getMealHistory(App.userId, today);
+            const history = await api.getMealHistory(today);
             loggedMeals = history.entries || [];
         } catch (err) {
             console.error('Failed to fetch meal history:', err);

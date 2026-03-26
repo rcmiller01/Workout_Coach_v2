@@ -9,7 +9,8 @@ Revision state handling:
     - superseded: newer revision targeting the same area replaced this one
     - blocked:    could not be applied due to a newer plan revision
 """
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from app.rate_limit import limiter
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc, func, update, and_, or_
 from datetime import datetime, timedelta, timezone
@@ -17,7 +18,7 @@ import json
 import logging
 
 from app.database import get_db
-from app.api.deps import get_optional_user
+from app.api.deps import get_current_user
 from app.models.user import User, UserProfile, WeightEntry
 from app.models.plan import WeeklyPlan, PlanRevision
 from app.schemas.plan import WeeklyPlanRequest, WeeklyPlanResponse, PlanRevisionResponse
@@ -112,11 +113,10 @@ async def _get_next_revision_number(db: AsyncSession, plan_id: str) -> int:
 
 
 @router.post("/weekly", response_model=WeeklyPlanResponse, status_code=201)
-async def generate_weekly_plan(request: WeeklyPlanRequest, current_user: User | None = Depends(get_optional_user), db: AsyncSession = Depends(get_db)):
-    request.user_id = current_user.id if current_user else request.user_id
-    if not request.user_id:
-        raise HTTPException(status_code=401, detail="Authentication required")
-    result = await db.execute(select(UserProfile).where(UserProfile.user_id == request.user_id))
+@limiter.limit("3/hour")
+async def generate_weekly_plan(request: Request, plan_data: WeeklyPlanRequest, current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    plan_data.user_id = current_user.id
+    result = await db.execute(select(UserProfile).where(UserProfile.user_id == plan_data.user_id))
     profile_model = result.scalar_one_or_none()
     if not profile_model:
         raise HTTPException(status_code=404, detail="Profile not found")
@@ -138,7 +138,7 @@ async def generate_weekly_plan(request: WeeklyPlanRequest, current_user: User | 
 
     service = _get_planning_service()
     try:
-        norm_plan = await service.create_weekly_plan(profile=profile_dict, fast_mode=request.fast_mode)
+        norm_plan = await service.create_weekly_plan(profile=profile_dict, fast_mode=plan_data.fast_mode)
     except Exception as e:
         logger.error("api_planning_failed", error=str(e))
         raise HTTPException(status_code=500, detail="Failed to generate plan")
@@ -147,7 +147,7 @@ async def generate_weekly_plan(request: WeeklyPlanRequest, current_user: User | 
     from sqlalchemy import update as sql_update
     old_plans_result = await db.execute(
         select(WeeklyPlan).where(
-            WeeklyPlan.user_id == request.user_id,
+            WeeklyPlan.user_id == plan_data.user_id,
             WeeklyPlan.status == "active",
         )
     )
@@ -166,7 +166,7 @@ async def generate_weekly_plan(request: WeeklyPlanRequest, current_user: User | 
         )
 
     new_plan = WeeklyPlan(
-        user_id=request.user_id,
+        user_id=plan_data.user_id,
         week_start=datetime.strptime(norm_plan.week_start, "%Y-%m-%d").replace(tzinfo=timezone.utc),
         week_end=datetime.strptime(norm_plan.week_end, "%Y-%m-%d").replace(tzinfo=timezone.utc),
         status="active",
@@ -183,11 +183,9 @@ async def generate_weekly_plan(request: WeeklyPlanRequest, current_user: User | 
     return new_plan
 
 
-@router.get("/current/{user_id}", response_model=WeeklyPlanResponse)
-async def get_current_plan(user_id: str = None, current_user: User | None = Depends(get_optional_user), db: AsyncSession = Depends(get_db)):
-    user_id = current_user.id if current_user else user_id
-    if not user_id:
-        raise HTTPException(status_code=401, detail="Authentication required")
+@router.get("/current", response_model=WeeklyPlanResponse)
+async def get_current_plan(current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    user_id = current_user.id
     res = await db.execute(select(WeeklyPlan).where(WeeklyPlan.user_id == user_id, WeeklyPlan.status == "active").order_by(desc(WeeklyPlan.created_at)).limit(1))
     plan = res.scalar_one_or_none()
     if not plan: raise HTTPException(status_code=404, detail="No active plan found")
@@ -195,10 +193,9 @@ async def get_current_plan(user_id: str = None, current_user: User | None = Depe
 
 
 @router.post("/replan", response_model=PlanRevisionResponse)
-async def adaptive_replan(user_id: str = Query(None), current_user: User | None = Depends(get_optional_user), db: AsyncSession = Depends(get_db)):
-    user_id = current_user.id if current_user else user_id
-    if not user_id:
-        raise HTTPException(status_code=401, detail="Authentication required")
+@limiter.limit("10/hour")
+async def adaptive_replan(request: Request, current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    user_id = current_user.id
     # 1. Get Active Plan
     res = await db.execute(select(WeeklyPlan).where(WeeklyPlan.user_id == user_id, WeeklyPlan.status == "active").order_by(desc(WeeklyPlan.created_at)))
     plan = res.scalar_one_or_none()
@@ -300,7 +297,7 @@ async def adaptive_replan(user_id: str = Query(None), current_user: User | None 
 
 
 @router.post("/replan/approve/{revision_id}", response_model=PlanRevisionResponse)
-async def approve_replan(revision_id: str, current_user: User | None = Depends(get_optional_user), db: AsyncSession = Depends(get_db)):
+async def approve_replan(revision_id: str, current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     res = await db.execute(select(PlanRevision).where(PlanRevision.id == revision_id))
     revision = res.scalar_one_or_none()
     if not revision: raise HTTPException(status_code=404, detail="Revision not found")
@@ -336,7 +333,7 @@ async def approve_replan(revision_id: str, current_user: User | None = Depends(g
 
 
 @router.post("/replan/undo/{revision_id}", response_model=PlanRevisionResponse)
-async def revert_replan(revision_id: str, current_user: User | None = Depends(get_optional_user), db: AsyncSession = Depends(get_db)):
+async def revert_replan(revision_id: str, current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """
     Reverse an auto-applied revision by creating a compensating patch.
     Marks the original as 'reverted' (not deleted) to preserve audit trail.
@@ -403,7 +400,7 @@ async def revert_replan(revision_id: str, current_user: User | None = Depends(ge
 
 
 @router.get("/revisions/{plan_id}", response_model=list[PlanRevisionResponse])
-async def get_plan_revisions(plan_id: str, current_user: User | None = Depends(get_optional_user), db: AsyncSession = Depends(get_db)):
+async def get_plan_revisions(plan_id: str, current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """
     Get all revisions for a plan, ordered newest first.
     Includes status labels for UI display.
@@ -417,11 +414,9 @@ async def get_plan_revisions(plan_id: str, current_user: User | None = Depends(g
     return revisions
 
 
-@router.get("/revisions/user/{user_id}", response_model=list[PlanRevisionResponse])
-async def get_user_revisions(user_id: str = None, limit: int = 20, current_user: User | None = Depends(get_optional_user), db: AsyncSession = Depends(get_db)):
-    user_id = current_user.id if current_user else user_id
-    if not user_id:
-        raise HTTPException(status_code=401, detail="Authentication required")
+@router.get("/revisions/user", response_model=list[PlanRevisionResponse])
+async def get_user_revisions(limit: int = 20, current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    user_id = current_user.id
     """
     Get all revisions for a user across all plans, ordered newest first.
     """

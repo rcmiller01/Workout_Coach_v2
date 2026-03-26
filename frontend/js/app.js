@@ -94,10 +94,6 @@ const App = {
                 }
             }
             this.loadViewData('dashboard');
-        } else if (Auth.isLegacyUser()) {
-            // Has old UUID but no JWT — still works via dual-mode
-            this.userId = localStorage.getItem('coach_user_id');
-            this.loadViewData('dashboard');
         } else {
             this.showAuthModal();
             return;
@@ -317,26 +313,26 @@ const App = {
         try {
             switch (route) {
                 case 'dashboard':
-                    const dash = await api.getDashboard(this.userId);
+                    const dash = await api.getDashboard();
                     this.dashboardData = dash;
                     DashboardComponent.render(dash);
                     break;
 
                 case 'workout':
-                    const workout = await api.getTodaysWorkout(this.userId);
+                    const workout = await api.getTodaysWorkout();
                     workout.active_summary = await this.getActiveSummary(this.userId);
                     WorkoutComponent.render(workout);
                     break;
 
                 case 'meals':
-                    const meals = await api.getTodaysMeals(this.userId);
+                    const meals = await api.getTodaysMeals();
                     meals.active_summary = await this.getActiveSummary(this.userId);
                     MealsComponent.render(meals);
                     break;
 
                 case 'shopping':
                     try {
-                        const plan = await api.getCurrentPlan(this.userId);
+                        const plan = await api.getCurrentPlan();
                         ShoppingComponent.render(plan.shopping_list || []);
                     } catch {
                         ShoppingComponent.render([]);
@@ -344,12 +340,12 @@ const App = {
                     break;
 
                 case 'progress':
-                    const history = await api.getWeightHistory(this.userId);
+                    const history = await api.getWeightHistory();
                     ProgressComponent.render(history);
                     break;
 
                 case 'trends':
-                    const trends = await api.getTrends(this.userId);
+                    const trends = await api.getTrends();
                     TrendsComponent.render(trends);
                     break;
 
@@ -390,7 +386,7 @@ const App = {
         this._busy.generatePlan = true;
         this._setGenerateButtons('generating');
         try {
-            await api.generateWeeklyPlan(this.userId);
+            await api.generateWeeklyPlan();
             this.loadViewData('dashboard');
         } catch (err) {
             alert('Plan generation failed: ' + err.message);
@@ -408,7 +404,7 @@ const App = {
 
         await this._runAction('completeWorkout', async () => {
             const { exercises, completion_pct } = WorkoutComponent.collectWorkoutData();
-            await api.logWorkout(this.userId, {
+            await api.logWorkout({
                 date: new Date().toISOString(),
                 exercises_completed: exercises,
                 completion_pct,
@@ -435,11 +431,11 @@ const App = {
         const btn = form.querySelector('button');
 
         await this._runAction('weightLog', async () => {
-            await api.logWeight(this.userId, weightKg, notes);
+            await api.logWeight(weightKg, notes);
 
             // Trigger adaptive replan (non-critical)
             try {
-                await api.replan(this.userId);
+                await api.replan();
             } catch (replanErr) {
                 console.error('Adaptive replan failed:', replanErr);
             }
@@ -474,7 +470,7 @@ const App = {
 
             // Step 2: Log the meal
             if (btn && btn.isConnected) btn.textContent = 'Logging…';
-            await api.logMeal(this.userId, {
+            await api.logMeal({
                 meal_type: mealType,
                 name: mealName,
                 calories: macros.calories,
@@ -515,7 +511,7 @@ const App = {
 
         await this._runAction(key, async () => {
             const meal = JSON.parse(decodeURIComponent(encodedData));
-            await api.logMeal(this.userId, {
+            await api.logMeal({
                 meal_type: meal.meal_type,
                 name: meal.name,
                 calories: meal.calories,
@@ -543,7 +539,7 @@ const App = {
         const deleteBtn = document.querySelector(`button[onclick*="deleteMealLog('${mealId}')"]`);
 
         await this._runAction('deleteMeal_' + mealId, async () => {
-            await api.deleteMealLog(this.userId, mealId);
+            await api.deleteMealLog(mealId);
             this.loadViewData('meals');
         }, {
             btn: deleteBtn,
@@ -569,7 +565,7 @@ const App = {
         modal.style.display = 'flex';
 
         try {
-            const revisions = await api.getUserRevisions(this.userId, 20);
+            const revisions = await api.getUserRevisions(20);
 
             if (!revisions || revisions.length === 0) {
                 list.innerHTML = '<div class="empty-state">No plan adjustments yet.</div>';

@@ -9,7 +9,7 @@ from typing import Optional
 import logging
 
 from app.database import get_db
-from app.api.deps import get_optional_user
+from app.api.deps import get_current_user
 from app.models.user import User
 from app.models.plan import WeeklyPlan, WorkoutLog, PlanRevision
 from app.schemas.workout import WorkoutLogCreate, WorkoutLogResponse
@@ -26,12 +26,10 @@ def _get_wger() -> WgerProvider:
     return WgerProvider(base_url=settings.wger_base_url, api_token=settings.wger_api_token)
 
 
-@router.get("/today/{user_id}")
-async def get_todays_workout(user_id: str = None, current_user: User | None = Depends(get_optional_user), db: AsyncSession = Depends(get_db)):
+@router.get("/today")
+async def get_todays_workout(current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """Get today's planned workout and active workout revision context."""
-    user_id = current_user.id if current_user else user_id
-    if not user_id:
-        raise HTTPException(status_code=401, detail="Authentication required")
+    user_id = current_user.id
     # Find active plan
     result = await db.execute(
         select(WeeklyPlan)
@@ -130,11 +128,9 @@ async def get_todays_workout(user_id: str = None, current_user: User | None = De
 
 
 @router.post("/log", response_model=WorkoutLogResponse, status_code=201)
-async def log_workout(data: WorkoutLogCreate, user_id: str = Query(None), current_user: User | None = Depends(get_optional_user), db: AsyncSession = Depends(get_db)):
+async def log_workout(data: WorkoutLogCreate, current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """Log a completed workout and sync to wger."""
-    user_id = current_user.id if current_user else user_id
-    if not user_id:
-        raise HTTPException(status_code=401, detail="Authentication required")
+    user_id = current_user.id
     log = WorkoutLog(
         user_id=user_id,
         plan_id=data.plan_id,
@@ -242,14 +238,11 @@ class AdHocExercise(BaseModel):
 async def add_exercise_to_log(
     log_id: str,
     exercise: AdHocExercise,
-    user_id: str = Query(None),
-    current_user: User | None = Depends(get_optional_user),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """Add an ad-hoc exercise or cardio to an existing workout log."""
-    user_id = current_user.id if current_user else user_id
-    if not user_id:
-        raise HTTPException(status_code=401, detail="Authentication required")
+    user_id = current_user.id
     result = await db.execute(
         select(WorkoutLog).where(WorkoutLog.id == log_id, WorkoutLog.user_id == user_id)
     )
@@ -291,14 +284,11 @@ async def add_exercise_to_log(
 async def delete_exercise_from_log(
     log_id: str,
     exercise_index: int,
-    user_id: str = Query(None),
-    current_user: User | None = Depends(get_optional_user),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """Remove an exercise from a workout log by index."""
-    user_id = current_user.id if current_user else user_id
-    if not user_id:
-        raise HTTPException(status_code=401, detail="Authentication required")
+    user_id = current_user.id
     result = await db.execute(
         select(WorkoutLog).where(WorkoutLog.id == log_id, WorkoutLog.user_id == user_id)
     )
@@ -339,14 +329,11 @@ async def delete_exercise_from_log(
 @router.delete("/log/{log_id}", status_code=204)
 async def delete_workout_log(
     log_id: str,
-    user_id: str = Query(None),
-    current_user: User | None = Depends(get_optional_user),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """Delete an entire workout log entry."""
-    user_id = current_user.id if current_user else user_id
-    if not user_id:
-        raise HTTPException(status_code=401, detail="Authentication required")
+    user_id = current_user.id
     result = await db.execute(
         select(WorkoutLog).where(WorkoutLog.id == log_id, WorkoutLog.user_id == user_id)
     )
@@ -359,17 +346,14 @@ async def delete_workout_log(
     return None
 
 
-@router.get("/history/{user_id}")
+@router.get("/history")
 async def get_workout_history(
-    user_id: str = None,
     limit: int = 20,
-    current_user: User | None = Depends(get_optional_user),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """Get workout log history."""
-    user_id = current_user.id if current_user else user_id
-    if not user_id:
-        raise HTTPException(status_code=401, detail="Authentication required")
+    user_id = current_user.id
     result = await db.execute(
         select(WorkoutLog)
         .where(WorkoutLog.user_id == user_id)

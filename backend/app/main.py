@@ -4,12 +4,15 @@ AI Fitness Coach v1 — Main Application Entry Point
 Orchestration API that sits between the frontend and
 external systems (wger, Tandoor, LLM).
 """
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
+from slowapi.errors import RateLimitExceeded
 from app.config import settings
 from app.database import init_db
+from app.rate_limit import limiter
 from app.api import (
     profile_router,
     planning_router,
@@ -87,6 +90,17 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan,
 )
+
+# ─── Rate Limiter Setup ───────────────────────────────────────
+
+app.state.limiter = limiter
+
+@app.exception_handler(RateLimitExceeded)
+async def _rate_limit_handler(request: Request, exc: RateLimitExceeded):
+    return JSONResponse(
+        status_code=429,
+        content={"detail": f"Rate limit exceeded: {exc.detail}"},
+    )
 
 # ─── Middleware ────────────────────────────────────────────────
 

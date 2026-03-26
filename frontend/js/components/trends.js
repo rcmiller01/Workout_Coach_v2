@@ -276,7 +276,7 @@ const TrendsComponent = {
         if (!userId) return;
 
         try {
-            const review = await api.getWeeklyReview(userId, 0);
+            const review = await api.getWeeklyReview(0);
             this.renderWeeklyReviewModal(review);
         } catch (err) {
             console.error('Failed to load weekly review:', err);

@@ -26,6 +26,9 @@ litellm>=1.55.0
 passlib[bcrypt]>=1.7.4
 python-jose[cryptography]>=3.3.0
 
+# --- Rate Limiting ---
+slowapi>=0.1.10
+
 # --- Utilities ---
 python-dotenv>=1.0.1
 python-dateutil>=2.9.0

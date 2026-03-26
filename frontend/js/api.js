@@ -1,11 +1,14 @@
 /**
  * AI Fitness Coach v1 — API Client
+ *
+ * All endpoints require JWT auth (injected automatically).
+ * User identity comes from the token — no user_id params needed.
  */
 const API_BASE = '/api';
 
 const api = {
     /**
-     * Make an API request
+     * Make an API request with JWT auth.
      */
     async request(method, path, body = null) {
         const opts = {
@@ -13,7 +16,6 @@ const api = {
             headers: { 'Content-Type': 'application/json' },
         };
 
-        // Inject JWT auth header if available
         const token = Auth.getAccessToken();
         if (token) {
             opts.headers['Authorization'] = `Bearer ${token}`;
@@ -24,7 +26,7 @@ const api = {
         try {
             let res = await fetch(`${API_BASE}${path}`, opts);
 
-            // Auto-refresh on 401 if we had a token
+            // Auto-refresh on 401
             if (res.status === 401 && token) {
                 const refreshed = await Auth.refreshTokens();
                 if (refreshed) {
@@ -35,6 +37,11 @@ const api = {
                     window.location.reload();
                     throw new Error('Session expired');
                 }
+            }
+
+            if (res.status === 429) {
+                const error = await res.json().catch(() => ({}));
+                throw new Error(error.detail || 'Rate limit exceeded. Please wait and try again.');
             }
 
             if (!res.ok) {
@@ -61,89 +68,85 @@ const api = {
     },
 
     // ── Dashboard ──
-    getDashboard(userId) {
-        return this.request('GET', `/dashboard/dashboard/${userId}`);
+    getDashboard() {
+        return this.request('GET', '/dashboard/dashboard');
     },
 
     // ── Profile ──
     createProfile(data) {
         return this.request('POST', '/profile/', data);
     },
-    getProfile(userId) {
-        return this.request('GET', `/profile/${userId}`);
+    getProfile() {
+        return this.request('GET', '/profile/me');
     },
-    updateProfile(userId, data) {
-        return this.request('PUT', `/profile/${userId}`, data);
+    updateProfile(data) {
+        return this.request('PUT', '/profile/me', data);
     },
-    logWeight(userId, weightKg, notes = null) {
+    logWeight(weightKg, notes = null) {
         return this.request('POST', '/profile/weight', {
-            user_id: userId,
             weight_kg: weightKg,
             notes: notes
         });
     },
+    getWeightHistory() {
+        return this.request('GET', '/profile/weight/history');
+    },
+
+    // ── Planning ──
+    generateWeeklyPlan(options = {}) {
+        return this.request('POST', '/planning/weekly', options);
+    },
+    getCurrentPlan() {
+        return this.request('GET', '/planning/current');
+    },
+    replan() {
+        return this.request('POST', '/planning/replan');
+    },
     approveReplan(revisionId) {
         return this.request('POST', `/planning/replan/approve/${revisionId}`);
-    },
-    getWeightHistory(userId) {
-        return this.request('GET', `/profile/weight/history/${userId}`);
     },
     undoReplan(revisionId) {
         return this.request('POST', `/planning/replan/undo/${revisionId}`);
     },
-
-
-
-    // ── Planning ──
-    generateWeeklyPlan(userId, options = {}) {
-        return this.request('POST', '/planning/weekly', {
-            user_id: userId,
-            ...options,
-        });
+    getRevisions(planId) {
+        return this.request('GET', `/planning/revisions/${planId}`);
     },
-    getCurrentPlan(userId) {
-        return this.request('GET', `/planning/current/${userId}`);
+    getUserRevisions(limit = 20) {
+        return this.request('GET', `/planning/revisions/user?limit=${limit}`);
     },
-    getPlanHistory(userId) {
-        return this.request('GET', `/planning/history/${userId}`);
-    },
-    replan(userId) {
-        return this.request('POST', `/planning/replan?user_id=${userId}`);
-    },
-
 
     // ── Workouts ──
-    getTodaysWorkout(userId) {
-        return this.request('GET', `/workouts/today/${userId}`);
+    getTodaysWorkout() {
+        return this.request('GET', '/workouts/today');
     },
-    logWorkout(userId, data) {
-        return this.request('POST', `/workouts/log?user_id=${userId}`, data);
+    logWorkout(data) {
+        return this.request('POST', '/workouts/log', data);
     },
-    addExerciseToLog(logId, userId, data) {
-        return this.request('POST', `/workouts/log/${logId}/exercise?user_id=${userId}`, data);
+    addExerciseToLog(logId, data) {
+        return this.request('POST', `/workouts/log/${logId}/exercise`, data);
     },
-    deleteExerciseFromLog(logId, userId, exerciseIndex) {
-        return this.request('DELETE', `/workouts/log/${logId}/exercise/${exerciseIndex}?user_id=${userId}`);
+    deleteExerciseFromLog(logId, exerciseIndex) {
+        return this.request('DELETE', `/workouts/log/${logId}/exercise/${exerciseIndex}`);
     },
-    deleteWorkoutLog(logId, userId) {
-        return this.request('DELETE', `/workouts/log/${logId}?user_id=${userId}`);
+    deleteWorkoutLog(logId) {
+        return this.request('DELETE', `/workouts/log/${logId}`);
     },
-    getWorkoutHistory(userId) {
-        return this.request('GET', `/workouts/history/${userId}`);
+    getWorkoutHistory() {
+        return this.request('GET', '/workouts/history');
     },
 
     // ── Meals ──
-    getTodaysMeals(userId) {
-        return this.request('GET', `/meals/today/${userId}`);
+    getTodaysMeals() {
+        return this.request('GET', '/meals/today');
     },
-    getMealPlan(userId) {
-        return this.request('GET', `/meals/plan/${userId}`);
+    getMealPlan() {
+        return this.request('GET', '/meals/plan');
     },
     importRecipe(url) {
         return this.request('POST', '/meals/import-recipe', { url });
     },
-    logMeal(userId, data) {
-        return this.request('POST', `/meals/log?user_id=${userId}`, data);
+    logMeal(data) {
+        return this.request('POST', '/meals/log', data);
     },
     estimateMacros(mealName, mealType, notes = null) {
         return this.request('POST', '/meals/estimate-macros', {
@@ -152,11 +155,11 @@ const api = {
             notes: notes
         });
     },
-    deleteMealLog(userId, mealId) {
-        return this.request('DELETE', `/meals/log/${mealId}?user_id=${userId}`);
+    deleteMealLog(mealId) {
+        return this.request('DELETE', `/meals/log/${mealId}`);
     },
-    getMealHistory(userId, date = null) {
-        let path = `/meals/history/${userId}`;
+    getMealHistory(date = null) {
+        let path = '/meals/history';
         if (date) path += `?date=${date}`;
         return this.request('GET', path);
     },
@@ -166,19 +169,11 @@ const api = {
         return this.request('GET', '/health');
     },
 
-    // ── Revisions ──
-    getRevisions(planId) {
-        return this.request('GET', `/planning/revisions/${planId}`);
-    },
-    getUserRevisions(userId, limit = 20) {
-        return this.request('GET', `/planning/revisions/user/${userId}?limit=${limit}`);
-    },
-
     // ── Review & Trends ──
-    getWeeklyReview(userId, weekOffset = 0) {
-        return this.request('GET', `/review/weekly/${userId}?week_offset=${weekOffset}`);
+    getWeeklyReview(weekOffset = 0) {
+        return this.request('GET', `/review/weekly?week_offset=${weekOffset}`);
     },
-    getTrends(userId) {
-        return this.request('GET', `/review/trends/${userId}`);
+    getTrends() {
+        return this.request('GET', '/review/trends');
     },
 };

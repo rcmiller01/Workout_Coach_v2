@@ -132,3 +132,26 @@ class WeightEntry(Base):
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
+
+class DailySteps(Base):
+    """
+    Daily step count entries — used to adjust calorie/activity interpretation.
+
+    Steps affect TDEE estimation and calorie targets, NOT workout volume.
+    Activity tiers:
+        < 5000  steps = sedentary   → -100 cal adjustment
+        5000-8000       = light     → baseline (no adjustment)
+        8000-12000      = moderate  → +100 cal adjustment
+        > 12000         = very active → +200 cal adjustment
+    """
+    __tablename__ = "daily_steps"
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    user_id = Column(String, nullable=False, index=True)
+    date = Column(DateTime(timezone=True), nullable=False)
+    steps = Column(Integer, nullable=False)
+    source = Column(String(20), default="manual")
+    # manual | healthkit | google_fit | fitbit
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
