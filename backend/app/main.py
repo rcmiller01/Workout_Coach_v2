@@ -151,5 +151,11 @@ app.include_router(admin_router)  # Has its own /api/admin prefix
 app.include_router(review_router)  # Has its own /api/review prefix
 
 # Static Files (Frontend PWA)
-_frontend_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "frontend")
+# Works both locally (backend/../frontend) and in Docker (/app/frontend)
+_app_dir = os.path.dirname(os.path.dirname(__file__))  # backend/ or /app/app/..
+_frontend_candidates = [
+    os.path.join(_app_dir, "frontend"),                          # Docker: /app/frontend
+    os.path.join(os.path.dirname(_app_dir), "frontend"),         # Local: backend/../frontend
+]
+_frontend_dir = next((d for d in _frontend_candidates if os.path.isdir(d)), _frontend_candidates[-1])
 app.mount("/", StaticFiles(directory=_frontend_dir, html=True), name="frontend")
