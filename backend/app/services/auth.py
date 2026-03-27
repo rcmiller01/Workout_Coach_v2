@@ -11,14 +11,27 @@ from app.config import settings
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto", bcrypt__rounds=12)
 
 
+def _truncate_password(password: str) -> str:
+    """Truncate password to 72 bytes (bcrypt limit) safely for multi-byte chars."""
+    return password.encode("utf-8")[:72].decode("utf-8", errors="ignore")
+
+
 def hash_password(password: str) -> str:
-    """Hash a plaintext password using bcrypt (truncates to 72 bytes for safety)."""
-    return pwd_context.hash(password[:72])
+    """Hash a plaintext password using bcrypt."""
+    import bcrypt as _bcrypt
+    safe_pw = _truncate_password(password).encode("utf-8")
+    salt = _bcrypt.gensalt(rounds=12)
+    return _bcrypt.hashpw(safe_pw, salt).decode("utf-8")
 
 
 def verify_password(plain: str, hashed: str) -> bool:
     """Verify a plaintext password against a bcrypt hash."""
-    return pwd_context.verify(plain[:72], hashed)
+    import bcrypt as _bcrypt
+    safe_pw = _truncate_password(plain).encode("utf-8")
+    try:
+        return _bcrypt.checkpw(safe_pw, hashed.encode("utf-8"))
+    except (ValueError, TypeError):
+        return False
 
 
 def create_access_token(user_id: str, username: str) -> str:
